@@ -1,0 +1,118 @@
+name: Bug report
+description: Report a defect or unexpected behavior in Concord
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before submitting**
+        - Search existing issues to avoid duplicates.
+        - **Redact tokens, passwords, MFA codes, QR tickets, and raw auth response bodies** from any logs or screenshots you attach.
+        - Concord is an unofficial Discord client. Issues asking for self-bot automation, mass actions, or scraping will be closed.
+
+  - type: input
+    id: version
+    attributes:
+      label: Concord version
+      description: Version of concord
+      placeholder: "2.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Include distribution and version where relevant.
+      placeholder: "Ubuntu 24.04, macOS 15.1, Windows 11 + WSL2"
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal emulator
+      placeholder: "Kitty 0.37, WezTerm 20240203, Alacritty 0.13, iTerm2 3.5"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: graphics
+    attributes:
+      label: Graphics protocol
+      description: Which image protocol your terminal advertises.
+      options:
+        - Kitty
+        - iTerm2
+        - Sixel
+        - Halfblocks
+        - Unknown / not relevant
+    validations:
+      required: false
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - Prebuilt release (cargo-dist)
+        - Homebrew
+        - crates.io (`cargo install concord`)
+        - Built from source
+        - Nix flake
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, ordered steps that trigger the bug.
+      placeholder: |
+        1. Launch concord.
+        2. Open a DM with ...
+        3. Press ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include any panic message or stack trace verbatim.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Enable file logging via the in-app diagnostics popup and paste the relevant excerpt.
+        **Redact tokens, passwords, MFA codes, QR tickets, and any raw auth response bodies.**
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Screenshots, recordings, config snippets, or links to related issues.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I removed tokens and other secrets from logs and screenshots.
+          required: true

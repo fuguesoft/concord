@@ -96,7 +96,8 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Install dist
+      - name:
+          Install dist
           # we specify bash to get pipefail. It guards against the `curl` command
           # failing. Otherwise `sh` won't catch that `curl` returned non-0
         shell: bash
@@ -181,6 +182,11 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
+      - name: expose Homebrew Opus to pkg-config (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "PKG_CONFIG_PATH=$(brew --prefix opus)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot

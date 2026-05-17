@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest a new feature or enhancement
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Out of scope**
+        - Self-bot automation, mass actions, or scraping that puts a real Discord account at risk.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you want. UI mockups or keybinding sketches help.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you already tried or rejected, and why.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any additional context.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and discussions for the same idea.
+          required: true
+        - label: This request does not involve self-bot automation, mass actions, or scraping.
+          required: true

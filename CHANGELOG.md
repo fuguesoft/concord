@@ -2,6 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-05-16
+
+### Bug Fixes
+
+- Reconnect voice gateway after unexpected disconnect by @chojs23
+- Mute voice playback while deafened by @chojs23
+- Ignore silent RTP for remote speaking by @chojs23
+- Show local speaking while alone in voice by @chojs23
+- Keep local speaking visible during redraw debounce by @chojs23
+- Show local mic activity before transmit confirmation by @chojs23
+- Move composer cursor vertically (#82) in [#82](https://github.com/chojs23/concord/pull/82) by @chojs23
+- Prefer text for native clipboard paste by @chojs23
+- Stabilize voice sound (#84) in [#84](https://github.com/chojs23/concord/pull/84) by @chojs23
+- Fix speaking state by @chojs23
+
+### Documentation
+
+- Update readme by @chojs23
+
+### Features
+
+- Join/Leave voice channel by @chojs23
+- Add voice shutdown cleanup and active voice UI indicators by @chojs23
+- Show voice connection status by @chojs23
+- Add voice websocket connection by @chojs23
+- Add DAVE signaling prototype using davey by @chojs23
+- Add voice gateway lifecycle status reporting and cleanup hardening by @chojs23
+- Add DAVE media-frame unwrap after RTP transport decrypt by @chojs23
+- Add receive-only Opus decode worker by @chojs23
+- Add optional feature-gated Discord voice playback backend by @chojs23
+- Capture ALSA diagnostics into Concord logs by @chojs23
+- Support u8 stream output by @chojs23
+- Add local microphone transmit by @chojs23
+- Gated capture-only microphone by @chojs23
+- Resampling by @chojs23
+- Highlight active voice speakers by @chojs23
+- Active speaker state by @chojs23
+- Add microphone sensitivity option by @chojs23
+- Mic sensitivity by @chojs23
+- Add voice channel join and leave sounds by @chojs23
+- Add volume config and shortcut for voice action by @chojs23
+- Voice chat (#78) in [#78](https://github.com/chojs23/concord/pull/78) by @chojs23
+- Better clipboard (#81) by @chojs23
+
+### Miscellaneous Tasks
+
+- Remove performance measurement logs by @chojs23
+- Add debug log for voice websocket by @chojs23
+- Treat DaveOutboundNotReady as transient DAVE setup log noise when microphone transmit works by @chojs23
+- Clippy by @chojs23
+
+### Performance
+
+- Reduce microphone transmit latency by dropping stale PCM frames by @chojs23
+
+### Revert
+
+- Remove redundant local speaking fallback fixes by @chojs23
+- Clipboard (#83) in [#83](https://github.com/chojs23/concord/pull/83) by @chojs23
+
 ## [1.4.2] - 2026-05-16
 
 ### Bug Fixes
