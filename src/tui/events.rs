@@ -68,22 +68,30 @@ fn handle_native_paste_key(
         return false;
     }
 
-    if state.composer_accepts_attachments()
-        && let Ok(attachment) = clipboard.clipboard_image_upload()
-    {
-        state.add_pending_composer_attachments(vec![attachment]);
-        state.show_success_toast("Clipboard image attached", std::time::Instant::now());
-        return true;
-    }
+    let text_error = match clipboard.clipboard_text() {
+        Ok(text) if input::handle_paste(state, &text) => return true,
+        Ok(_) => None,
+        Err(error) => Some(error),
+    };
 
-    match clipboard.clipboard_text() {
-        Ok(text) if input::handle_paste(state, &text) => true,
-        Ok(_) => false,
-        Err(error) => {
-            logging::error("tui", format!("native paste failed: {error}"));
-            state.show_error_toast("No clipboard content", std::time::Instant::now());
-            true
+    if state.composer_accepts_attachments() {
+        match clipboard.clipboard_image_upload() {
+            Ok(attachment) => {
+                state.add_pending_composer_attachments(vec![attachment]);
+                state.show_success_toast("Clipboard image attached", std::time::Instant::now());
+                true
+            }
+            Err(error) => {
+                if let Some(text_error) = text_error {
+                    logging::error("tui", format!("native text paste failed: {text_error}"));
+                }
+                logging::error("tui", format!("native image paste failed: {error}"));
+                state.show_error_toast("No clipboard content", std::time::Instant::now());
+                true
+            }
         }
+    } else {
+        false
     }
 }
 
