@@ -1499,6 +1499,7 @@ mod tests {
                     "members": [
                         {
                             "nick": "Alice Nick",
+                            "roles": ["30", "31"],
                             "user": {
                                 "id": "10",
                                 "username": "alice",
@@ -1530,6 +1531,7 @@ mod tests {
                 if *guild_id == Id::new(1)
                     && member.user_id == Id::new(10)
                     && member.display_name == "Alice Nick"
+                    && member.role_ids == vec![Id::new(30), Id::new(31)]
                     && !member.is_bot
         ));
         assert!(matches!(

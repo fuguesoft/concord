@@ -77,6 +77,10 @@ pub(super) fn process_effect_event(
     ctx: &mut EffectContext<'_>,
 ) -> EffectProcessingOutcome {
     let outcome = EffectProcessingOutcome::processed(&event);
+    let message_history = match &event {
+        AppEvent::MessageHistoryLoaded { messages, .. } => Some(messages.clone()),
+        _ => None,
+    };
     if let Some(notification) = ctx.state.desktop_notification_for_event(&event) {
         dispatch_desktop_notification(notification);
     }
@@ -96,6 +100,10 @@ pub(super) fn process_effect_event(
         handle_gateway_closed(ctx.state);
     } else {
         ctx.state.push_effect(event);
+    }
+    if let Some(messages) = message_history {
+        ctx.state
+            .enqueue_missing_message_author_member_requests(&messages);
     }
     outcome
 }
@@ -356,4 +364,115 @@ pub(super) fn handle_gateway_closed(state: &mut DashboardState) {
     logging::error("tui", "gateway closed");
     state.push_effect(AppEvent::GatewayClosed);
     state.quit();
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::sync::mpsc;
+
+    use crate::discord::ids::Id;
+    use crate::discord::{
+        AppCommand, AppEvent, ChannelInfo, MemberInfo, MessageInfo, MessageKind, RoleInfo,
+    };
+
+    use super::*;
+
+    #[test]
+    fn message_history_loaded_enqueues_missing_author_member_request() {
+        let guild_id = Id::new(1);
+        let channel_id = Id::new(2);
+        let author_id = Id::new(99);
+        let mut state = DashboardState::new();
+        state.push_event(AppEvent::GuildCreate {
+            guild_id,
+            name: "guild".to_owned(),
+            member_count: None,
+            owner_id: None,
+            channels: vec![ChannelInfo {
+                guild_id: Some(guild_id),
+                channel_id,
+                parent_id: None,
+                position: Some(0),
+                last_message_id: None,
+                name: "general".to_owned(),
+                kind: "GuildText".to_owned(),
+                message_count: None,
+                total_message_sent: None,
+                thread_archived: None,
+                thread_locked: None,
+                thread_pinned: None,
+                recipients: None,
+                permission_overwrites: Vec::new(),
+            }],
+            members: Vec::<MemberInfo>::new(),
+            presences: Vec::new(),
+            roles: vec![RoleInfo {
+                id: Id::new(guild_id.get()),
+                name: "@everyone".to_owned(),
+                color: None,
+                position: 0,
+                hoist: false,
+                permissions: 0,
+            }],
+            emojis: Vec::new(),
+        });
+        let mut image_previews = ImagePreviewCache::new();
+        let mut avatar_images = AvatarImageCache::new();
+        let mut emoji_images = EmojiImageCache::new();
+        let mut history_requests = HistoryRequests::default();
+        let mut forum_post_requests = ForumPostRequests::default();
+        let mut pinned_message_requests = PinnedMessageRequests::default();
+        let mut thread_preview_requests = ThreadPreviewRequests::default();
+        let (preview_decode_tx, _preview_decode_rx) = mpsc::unbounded_channel();
+        let mut ctx = EffectContext {
+            state: &mut state,
+            image_previews: &mut image_previews,
+            avatar_images: &mut avatar_images,
+            emoji_images: &mut emoji_images,
+            history_requests: &mut history_requests,
+            forum_post_requests: &mut forum_post_requests,
+            pinned_message_requests: &mut pinned_message_requests,
+            thread_preview_requests: &mut thread_preview_requests,
+            preview_decode_tx: &preview_decode_tx,
+        };
+
+        process_effect_event(
+            AppEvent::MessageHistoryLoaded {
+                channel_id,
+                before: None,
+                messages: vec![MessageInfo {
+                    guild_id: Some(guild_id),
+                    channel_id,
+                    message_id: Id::new(20),
+                    author_id,
+                    author: "neo".to_owned(),
+                    author_avatar_url: None,
+                    author_role_ids: Vec::new(),
+                    message_kind: MessageKind::regular(),
+                    reference: None,
+                    reply: None,
+                    poll: None,
+                    pinned: false,
+                    reactions: Vec::new(),
+                    content: Some("hello".to_owned()),
+                    sticker_names: Vec::new(),
+                    mentions: Vec::new(),
+                    attachments: Vec::new(),
+                    embeds: Vec::new(),
+                    forwarded_snapshots: Vec::new(),
+                    edited_timestamp: None,
+                }],
+            },
+            &mut ctx,
+        );
+        drop(ctx);
+
+        assert_eq!(
+            state.drain_pending_commands(),
+            vec![AppCommand::LoadGuildMembersByIds {
+                guild_id,
+                user_ids: vec![author_id],
+            }]
+        );
+    }
 }

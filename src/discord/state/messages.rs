@@ -327,6 +327,31 @@ impl DiscordState {
         selected_role_ids_color(role_ids, roles)
     }
 
+    pub fn message_author_role_ids_known(
+        &self,
+        guild_id: Id<GuildMarker>,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        user_id: Id<UserMarker>,
+    ) -> bool {
+        if let Some(member) = self
+            .guild_details
+            .members
+            .get(&guild_id)
+            .and_then(|members| members.get(&user_id))
+        {
+            return member.username.is_some() || !member.role_ids.is_empty();
+        }
+
+        self.profiles
+            .profile_role_ids
+            .contains_key(&(guild_id, user_id))
+            || self
+                .message_cache
+                .message_author_role_ids
+                .contains_key(&(channel_id, message_id))
+    }
+
     pub(super) fn message_author_display_name(
         &self,
         guild_id: Option<Id<GuildMarker>>,

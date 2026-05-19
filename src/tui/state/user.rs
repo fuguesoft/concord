@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use ratatui::{
     layout::Alignment,
     style::{Color, Style},
@@ -8,7 +10,9 @@ use crate::discord::ids::{
     Id,
     marker::{GuildMarker, UserMarker},
 };
-use crate::discord::{ActivityInfo, AppCommand, MessageState, PresenceStatus, UserProfileInfo};
+use crate::discord::{
+    ActivityInfo, AppCommand, MessageInfo, MessageState, PresenceStatus, UserProfileInfo,
+};
 
 use super::{ActiveGuildScope, DashboardState};
 use super::{
@@ -29,6 +33,8 @@ fn clamp_user_profile_popup_scroll(popup: &mut UserProfilePopupState) {
     let max_scroll = popup.total_lines.saturating_sub(popup.view_height);
     popup.scroll = popup.scroll.min(max_scroll);
 }
+
+const MAX_MESSAGE_AUTHOR_MEMBER_REQUEST_USERS: usize = 100;
 
 impl DashboardState {
     pub fn is_user_profile_popup_open(&self) -> bool {
@@ -295,6 +301,56 @@ impl DashboardState {
             message.id,
             message.author_id,
         )
+    }
+
+    pub fn missing_message_author_member_requests(
+        &self,
+        messages: &[MessageInfo],
+    ) -> Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)> {
+        let mut by_guild: BTreeMap<Id<GuildMarker>, BTreeSet<Id<UserMarker>>> = BTreeMap::new();
+
+        for message in messages {
+            if !message.author_role_ids.is_empty() {
+                continue;
+            }
+
+            let channel = self.discord.channel(message.channel_id);
+            let Some(guild_id) = message
+                .guild_id
+                .or_else(|| channel.and_then(|channel| channel.guild_id))
+            else {
+                continue;
+            };
+
+            if !self.discord.message_author_role_ids_known(
+                guild_id,
+                message.channel_id,
+                message.message_id,
+                message.author_id,
+            ) {
+                by_guild
+                    .entry(guild_id)
+                    .or_default()
+                    .insert(message.author_id);
+            }
+        }
+
+        by_guild
+            .into_iter()
+            .map(|(guild_id, user_ids)| (guild_id, user_ids.into_iter().collect()))
+            .collect()
+    }
+
+    pub fn enqueue_missing_message_author_member_requests(&mut self, messages: &[MessageInfo]) {
+        for (guild_id, user_ids) in self.missing_message_author_member_requests(messages) {
+            for chunk in user_ids.chunks(MAX_MESSAGE_AUTHOR_MEMBER_REQUEST_USERS) {
+                self.pending_commands
+                    .push_back(AppCommand::LoadGuildMembersByIds {
+                        guild_id,
+                        user_ids: chunk.to_vec(),
+                    });
+            }
+        }
     }
 
     pub fn member_role_color(&self, member: MemberEntry<'_>) -> Option<u32> {

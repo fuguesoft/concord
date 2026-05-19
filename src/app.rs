@@ -263,6 +263,16 @@ fn start_command_loop(
                                 .await;
                         }
                     }
+                    AppCommand::LoadGuildMembersByIds { guild_id, user_ids } => {
+                        if let Err(message) =
+                            client.request_guild_members_by_ids(guild_id, user_ids)
+                        {
+                            logging::error("app", &message);
+                            client
+                                .publish_event(AppEvent::GatewayError { message })
+                                .await;
+                        }
+                    }
                     AppCommand::SearchGuildMembers { guild_id, query } => {
                         if let Err(message) = client.search_guild_members(
                             guild_id,

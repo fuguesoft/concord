@@ -152,6 +152,10 @@ pub enum AppCommand {
     LoadGuildMembers {
         guild_id: Id<GuildMarker>,
     },
+    LoadGuildMembersByIds {
+        guild_id: Id<GuildMarker>,
+        user_ids: Vec<Id<UserMarker>>,
+    },
     SearchGuildMembers {
         guild_id: Id<GuildMarker>,
         query: String,

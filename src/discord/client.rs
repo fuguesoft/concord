@@ -175,6 +175,23 @@ impl DiscordClient {
             .map_err(|_| "gateway command channel closed".to_owned())
     }
 
+    pub fn request_guild_members_by_ids(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_ids: Vec<Id<UserMarker>>,
+    ) -> std::result::Result<(), String> {
+        if user_ids.is_empty() {
+            return Ok(());
+        }
+        self.gateway_commands_tx
+            .send(GatewayCommand::RequestGuildMembersByIds {
+                guild_id,
+                user_ids,
+                presences: false,
+            })
+            .map_err(|_| "gateway command channel closed".to_owned())
+    }
+
     pub fn search_guild_members(
         &self,
         guild_id: Id<GuildMarker>,
@@ -954,6 +971,45 @@ mod tests {
         let nonce = nonce.expect("member search should include nonce");
         assert!(nonce.starts_with("mention-ac-1-"));
         assert!(!nonce.contains(&query));
+    }
+
+    #[test]
+    fn guild_member_request_by_ids_queues_gateway_command() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let client = DiscordClient::new("test-token".to_owned()).expect("token is valid header");
+        let mut gateway_commands = client
+            .gateway_commands_rx
+            .lock()
+            .expect("gateway command receiver mutex is not poisoned")
+            .take()
+            .expect("gateway commands can be taken once");
+
+        client
+            .request_guild_members_by_ids(Id::new(1), Vec::new())
+            .expect("empty request is ignored without closing channel");
+        assert!(matches!(
+            gateway_commands.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+
+        client
+            .request_guild_members_by_ids(Id::new(1), vec![Id::new(20), Id::new(30)])
+            .expect("valid request should queue");
+
+        let command = gateway_commands
+            .try_recv()
+            .expect("member request should be queued");
+        let GatewayCommand::RequestGuildMembersByIds {
+            guild_id,
+            user_ids,
+            presences,
+        } = command
+        else {
+            panic!("expected guild member id request command");
+        };
+        assert_eq!(guild_id, Id::new(1));
+        assert_eq!(user_ids, vec![Id::new(20), Id::new(30)]);
+        assert!(!presences);
     }
 
     #[tokio::test]

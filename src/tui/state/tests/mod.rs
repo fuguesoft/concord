@@ -710,6 +710,74 @@ fn member_role_color_uses_highest_nonzero_role_color() {
 }
 
 #[test]
+fn message_history_authors_missing_member_roles_are_requested_from_batch() {
+    let guild_id = Id::new(1);
+    let channel_id = Id::new(2);
+    let author_id = Id::new(99);
+    let mut state = state_with_writable_channel();
+    let mut message = message_info(channel_id, 20);
+    message.author_id = author_id;
+    let mut duplicate = message_info(channel_id, 21);
+    duplicate.author_id = author_id;
+    let mut known_member = message_info(channel_id, 22);
+    known_member.author_id = Id::new(10);
+    known_member.author_role_ids = vec![Id::new(100)];
+
+    assert_eq!(
+        state.missing_message_author_member_requests(&[message.clone(), duplicate, known_member]),
+        vec![(guild_id, vec![author_id])]
+    );
+
+    state.push_event(AppEvent::GuildMemberUpsert {
+        guild_id,
+        member: MemberInfo {
+            user_id: author_id,
+            display_name: "neo".to_owned(),
+            username: Some("neo".to_owned()),
+            is_bot: false,
+            avatar_url: None,
+            role_ids: Vec::new(),
+        },
+    });
+
+    assert_eq!(
+        state.missing_message_author_member_requests(&[message]),
+        Vec::new()
+    );
+}
+
+#[test]
+fn message_history_author_member_requests_chunk_at_gateway_limit() {
+    let guild_id = Id::new(1);
+    let channel_id = Id::new(2);
+    let mut state = state_with_writable_channel();
+    state.drain_pending_commands();
+    let messages = (1..=105)
+        .map(|offset| {
+            let mut message = message_info(channel_id, 1_000 + offset);
+            message.author_id = Id::new(1_000 + offset);
+            message
+        })
+        .collect::<Vec<_>>();
+
+    state.enqueue_missing_message_author_member_requests(&messages);
+
+    assert_eq!(
+        state.drain_pending_commands(),
+        vec![
+            AppCommand::LoadGuildMembersByIds {
+                guild_id,
+                user_ids: (1_001..=1_100).map(Id::new).collect(),
+            },
+            AppCommand::LoadGuildMembersByIds {
+                guild_id,
+                user_ids: (1_101..=1_105).map(Id::new).collect(),
+            },
+        ]
+    );
+}
+
+#[test]
 fn member_role_color_breaks_equal_position_ties_by_role_id() {
     let guild_id = Id::new(1);
     let user_id = Id::new(10);

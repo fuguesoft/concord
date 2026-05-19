@@ -5,7 +5,7 @@ use std::{
 
 use crate::discord::ids::{
     Id,
-    marker::{ChannelMarker, GuildMarker},
+    marker::{ChannelMarker, GuildMarker, UserMarker},
 };
 use futures::{SinkExt, StreamExt};
 use rand::Rng;
@@ -41,6 +41,11 @@ pub enum GatewayCommand {
         limit: u16,
         presences: bool,
         nonce: Option<String>,
+    },
+    RequestGuildMembersByIds {
+        guild_id: Id<GuildMarker>,
+        user_ids: Vec<Id<UserMarker>>,
+        presences: bool,
     },
     SubscribeDirectMessage {
         channel_id: Id<ChannelMarker>,
@@ -564,6 +569,22 @@ async fn dispatch_command(writer: &WriterHandle, command: GatewayCommand) -> Res
             );
             request_guild_members_payload(guild_id, &query, limit, presences, nonce.as_deref())
         }
+        GatewayCommand::RequestGuildMembersByIds {
+            guild_id,
+            user_ids,
+            presences,
+        } => {
+            logging::debug(
+                "gateway",
+                format!(
+                    "requesting guild members by id: guild={} users={} presences={}",
+                    guild_id.get(),
+                    user_ids.len(),
+                    presences
+                ),
+            );
+            request_guild_members_by_ids_payload(guild_id, &user_ids, presences)
+        }
         GatewayCommand::SubscribeDirectMessage { channel_id } => {
             logging::debug(
                 "gateway",
@@ -718,6 +739,27 @@ fn request_guild_members_payload(
     .to_string()
 }
 
+fn request_guild_members_by_ids_payload(
+    guild_id: Id<GuildMarker>,
+    user_ids: &[Id<UserMarker>],
+    presences: bool,
+) -> String {
+    let user_ids = user_ids
+        .iter()
+        .take(100)
+        .map(|user_id| user_id.to_string())
+        .collect::<Vec<_>>();
+    json!({
+        "op": 8,
+        "d": {
+            "guild_id": guild_id.to_string(),
+            "user_ids": user_ids,
+            "presences": presences,
+        },
+    })
+    .to_string()
+}
+
 fn direct_message_subscribe_payload(channel_id: Id<ChannelMarker>) -> String {
     json!({
         "op": 13,
@@ -774,14 +816,15 @@ fn voice_state_update_payload(
 mod tests {
     use crate::discord::ids::{
         Id,
-        marker::{ChannelMarker, GuildMarker},
+        marker::{ChannelMarker, GuildMarker, UserMarker},
     };
     use serde_json::json;
 
     use super::{
         GATEWAY_WEBSOCKET_LIMIT, SessionState, USER_ACCOUNT_CAPABILITIES, build_identify_payload,
         build_resume_payload, direct_message_subscribe_payload, gateway_websocket_config,
-        guild_channel_subscribe_payload, request_guild_members_payload, voice_state_update_payload,
+        guild_channel_subscribe_payload, request_guild_members_by_ids_payload,
+        request_guild_members_payload, voice_state_update_payload,
     };
 
     #[test]
@@ -865,6 +908,29 @@ mod tests {
         assert_eq!(full_load_payload["d"]["limit"].as_u64(), Some(0));
         assert_eq!(full_load_payload["d"]["presences"].as_bool(), Some(true));
         assert!(full_load_payload["d"].get("nonce").is_none());
+    }
+
+    #[test]
+    fn request_guild_members_by_ids_payload_matches_web_shape() {
+        let payload: serde_json::Value =
+            serde_json::from_str(&request_guild_members_by_ids_payload(
+                Id::<GuildMarker>::new(10),
+                &[Id::<UserMarker>::new(20), Id::<UserMarker>::new(30)],
+                false,
+            ))
+            .expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            json!({
+                "op": 8,
+                "d": {
+                    "guild_id": "10",
+                    "user_ids": ["20", "30"],
+                    "presences": false
+                }
+            })
+        );
     }
 
     #[test]
