@@ -851,12 +851,22 @@ impl DiscordState {
         channel_id: Id<ChannelMarker>,
         message_id: Id<MessageMarker>,
     ) {
+        self.delete_messages(channel_id, &[message_id]);
+    }
+
+    pub(super) fn delete_messages(
+        &mut self,
+        channel_id: Id<ChannelMarker>,
+        message_ids: &[Id<MessageMarker>],
+    ) {
         self.update_cached_messages_in_channel(channel_id, |messages| {
-            messages.retain(|message| message.id != message_id);
+            messages.retain(|message| !message_ids.contains(&message.id));
         });
-        self.message_cache
-            .message_author_role_ids
-            .remove(&(channel_id, message_id));
+        for message_id in message_ids {
+            self.message_cache
+                .message_author_role_ids
+                .remove(&(channel_id, *message_id));
+        }
     }
 
     fn record_message_author_role_ids(&mut self, message: &MessageInfo) {

@@ -689,6 +689,11 @@ pub enum AppEvent {
         channel_id: Id<ChannelMarker>,
         message_id: Id<MessageMarker>,
     },
+    MessageDeleteBulk {
+        guild_id: Option<Id<GuildMarker>>,
+        channel_id: Id<ChannelMarker>,
+        message_ids: Vec<Id<MessageMarker>>,
+    },
     GuildMemberListCounts {
         guild_id: Id<GuildMarker>,
         online: u32,
@@ -1172,6 +1177,18 @@ mod tests {
 
         assert!(!event.mutates_discord_state());
         assert!(event.needs_effect_delivery());
+    }
+
+    #[test]
+    fn message_delete_bulk_is_snapshot_driven_state_mutation() {
+        let event = AppEvent::MessageDeleteBulk {
+            guild_id: Some(Id::new(1)),
+            channel_id: Id::new(10),
+            message_ids: vec![Id::new(20), Id::new(30)],
+        };
+
+        assert!(event.mutates_discord_state());
+        assert!(!event.needs_effect_delivery());
     }
 
     fn attachment_info(filename: &str, content_type: Option<&str>) -> AttachmentInfo {

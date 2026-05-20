@@ -666,6 +666,25 @@ pub(super) fn parse_message_delete(data: &Value) -> Option<AppEvent> {
     })
 }
 
+pub(super) fn parse_message_delete_bulk(data: &Value) -> Option<AppEvent> {
+    let channel_id = parse_id::<ChannelMarker>(data.get("channel_id")?)?;
+    let message_ids = data
+        .get("ids")?
+        .as_array()?
+        .iter()
+        .filter_map(parse_id::<MessageMarker>)
+        .collect::<Vec<_>>();
+    if message_ids.is_empty() {
+        return None;
+    }
+    let guild_id = data.get("guild_id").and_then(parse_id::<GuildMarker>);
+    Some(AppEvent::MessageDeleteBulk {
+        guild_id,
+        channel_id,
+        message_ids,
+    })
+}
+
 pub(super) fn parse_message_ack(data: &Value) -> Option<AppEvent> {
     Some(AppEvent::MessageAck {
         channel_id: parse_id::<ChannelMarker>(data.get("channel_id")?)?,

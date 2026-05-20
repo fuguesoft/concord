@@ -527,7 +527,8 @@ impl DiscordState {
             | AppEvent::MessagePinnedUpdate { .. }
             | AppEvent::PinnedMessagesLoaded { .. }
             | AppEvent::CurrentUserPollVoteUpdate { .. }
-            | AppEvent::MessageDelete { .. } => SnapshotAreas::message(),
+            | AppEvent::MessageDelete { .. }
+            | AppEvent::MessageDeleteBulk { .. } => SnapshotAreas::message(),
 
             AppEvent::SelectedMessageChannelChanged { .. } => {
                 SnapshotAreas::navigation_and_message()
@@ -944,6 +945,11 @@ impl DiscordState {
                 message_id,
                 ..
             } => self.delete_message(*channel_id, *message_id),
+            AppEvent::MessageDeleteBulk {
+                channel_id,
+                message_ids,
+                ..
+            } => self.delete_messages(*channel_id, message_ids),
             AppEvent::GuildMemberListCounts { guild_id, online } => {
                 if let Some(guild) = self.navigation.guilds.get_mut(guild_id) {
                     guild.online_count = Some(*online);

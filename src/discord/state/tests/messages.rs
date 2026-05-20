@@ -835,6 +835,42 @@ fn pinned_messages_loaded_stay_out_of_normal_history() {
 }
 
 #[test]
+fn bulk_delete_removes_messages_from_normal_and_pinned_caches() {
+    let channel_id: Id<ChannelMarker> = Id::new(10);
+    let mut state = DiscordState::default();
+
+    state.apply_event(&AppEvent::MessageHistoryLoaded {
+        channel_id,
+        before: None,
+        messages: vec![
+            message_info(channel_id, 10, "keep"),
+            message_info(channel_id, 20, "delete"),
+            message_info(channel_id, 30, "delete too"),
+        ],
+    });
+    state.apply_event(&AppEvent::PinnedMessagesLoaded {
+        channel_id,
+        messages: vec![message_info(channel_id, 20, "pinned delete")],
+    });
+
+    state.apply_event(&AppEvent::MessageDeleteBulk {
+        guild_id: Some(Id::new(1)),
+        channel_id,
+        message_ids: vec![Id::new(20), Id::new(30)],
+    });
+
+    assert_eq!(
+        state
+            .messages_for_channel(channel_id)
+            .into_iter()
+            .map(|message| message.id.get())
+            .collect::<Vec<_>>(),
+        vec![10]
+    );
+    assert!(state.pinned_messages_for_channel(channel_id).is_empty());
+}
+
+#[test]
 fn pinned_messages_loaded_mark_overlapping_normal_messages() {
     let channel_id: Id<ChannelMarker> = Id::new(10);
     let mut state = DiscordState::default();

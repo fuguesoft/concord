@@ -24,8 +24,8 @@ use members::{
 };
 pub(crate) use messages::parse_message_info;
 use messages::{
-    parse_message_ack, parse_message_create, parse_message_delete, parse_message_reaction_add,
-    parse_message_reaction_remove, parse_message_reaction_remove_all,
+    parse_message_ack, parse_message_create, parse_message_delete, parse_message_delete_bulk,
+    parse_message_reaction_add, parse_message_reaction_remove, parse_message_reaction_remove_all,
     parse_message_reaction_remove_emoji, parse_message_update,
 };
 use presence::{parse_presence_update, parse_typing_start};
@@ -67,6 +67,7 @@ pub(super) fn parse_user_account_event(raw: &str) -> Vec<AppEvent> {
         "MESSAGE_CREATE" => parse_message_create(data).into_iter().collect(),
         "MESSAGE_UPDATE" => parse_message_update(data).into_iter().collect(),
         "MESSAGE_DELETE" => parse_message_delete(data).into_iter().collect(),
+        "MESSAGE_DELETE_BULK" => parse_message_delete_bulk(data).into_iter().collect(),
         "MESSAGE_REACTION_ADD" => parse_message_reaction_add(data).into_iter().collect(),
         "MESSAGE_REACTION_REMOVE" => parse_message_reaction_remove(data).into_iter().collect(),
         "MESSAGE_REACTION_REMOVE_ALL" => parse_message_reaction_remove_all(data)
@@ -1748,6 +1749,50 @@ mod tests {
         assert_eq!(poll.results_finalized, Some(true));
         assert_eq!(poll.answers[0].vote_count, Some(5));
         assert!(poll.answers[0].me_voted);
+    }
+
+    #[test]
+    fn message_delete_bulk_dispatch_parses_deleted_message_ids() {
+        let events = parse_user_account_event(
+            &json!({
+                "t": "MESSAGE_DELETE_BULK",
+                "d": {
+                    "guild_id": "1",
+                    "channel_id": "10",
+                    "ids": ["20", "30"]
+                }
+            })
+            .to_string(),
+        );
+
+        assert_eq!(events.len(), 1);
+        let AppEvent::MessageDeleteBulk {
+            guild_id,
+            channel_id,
+            message_ids,
+        } = &events[0]
+        else {
+            panic!("expected message delete bulk event");
+        };
+        assert_eq!(*guild_id, Some(Id::new(1)));
+        assert_eq!(*channel_id, Id::new(10));
+        assert_eq!(message_ids, &vec![Id::new(20), Id::new(30)]);
+    }
+
+    #[test]
+    fn message_delete_bulk_dispatch_ignores_empty_deleted_message_ids() {
+        let events = parse_user_account_event(
+            &json!({
+                "t": "MESSAGE_DELETE_BULK",
+                "d": {
+                    "channel_id": "10",
+                    "ids": []
+                }
+            })
+            .to_string(),
+        );
+
+        assert!(events.is_empty());
     }
 
     #[test]
