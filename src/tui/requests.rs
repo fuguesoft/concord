@@ -44,6 +44,12 @@ pub(super) struct MessageAuthorMemberRequests {
     requested_order: VecDeque<MessageAuthorMemberRequestKey>,
 }
 
+#[derive(Default)]
+pub(super) struct InitialUnknownMemberRequests {
+    requested: HashMap<InitialUnknownMemberRequestKey, Instant>,
+    requested_order: VecDeque<InitialUnknownMemberRequestKey>,
+}
+
 pub(super) struct MemberListSubscriptionTarget {
     pub(super) guild_id: Id<GuildMarker>,
     pub(super) channel_id: Id<ChannelMarker>,
@@ -304,6 +310,56 @@ impl MessageAuthorMemberRequests {
     }
 }
 
+impl InitialUnknownMemberRequests {
+    const REQUEST_TTL: Duration = Duration::from_secs(30);
+    const MAX_REQUESTED: usize = 4096;
+
+    pub(super) fn next(
+        &mut self,
+        missing: Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)>,
+        now: Instant,
+    ) -> Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)> {
+        self.prune_requested(now);
+
+        let mut requests = Vec::new();
+        for (guild_id, user_ids) in missing {
+            let fresh_user_ids = user_ids
+                .into_iter()
+                .filter(|user_id| self.insert_requested((guild_id, *user_id), now))
+                .collect::<Vec<_>>();
+            if !fresh_user_ids.is_empty() {
+                requests.push((guild_id, fresh_user_ids));
+            }
+        }
+        requests
+    }
+
+    fn insert_requested(&mut self, key: InitialUnknownMemberRequestKey, now: Instant) -> bool {
+        if self.requested.contains_key(&key) {
+            return false;
+        }
+        self.requested.insert(key, now);
+        self.requested_order.push_back(key);
+        self.prune_requested(now);
+        true
+    }
+
+    fn prune_requested(&mut self, now: Instant) {
+        self.requested.retain(|_, requested_at| {
+            now.checked_duration_since(*requested_at)
+                .is_none_or(|age| age <= Self::REQUEST_TTL)
+        });
+        self.requested_order
+            .retain(|key| self.requested.contains_key(key));
+        while self.requested.len() > Self::MAX_REQUESTED {
+            let Some(oldest) = self.requested_order.pop_front() else {
+                break;
+            };
+            self.requested.remove(&oldest);
+        }
+    }
+}
+
 impl MemberListSubscriptionRequests {
     const DEBOUNCE: Duration = Duration::from_millis(100);
 
@@ -494,6 +550,7 @@ impl MentionMemberSearchRequests {
 
 type MentionMemberSearchKey = (Id<GuildMarker>, String);
 type MessageAuthorMemberRequestKey = (Id<GuildMarker>, Id<UserMarker>);
+type InitialUnknownMemberRequestKey = (Id<GuildMarker>, Id<UserMarker>);
 
 #[derive(PartialEq)]
 struct MemberListSubscriptionKey {

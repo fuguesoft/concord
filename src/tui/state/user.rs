@@ -34,7 +34,7 @@ fn clamp_user_profile_popup_scroll(popup: &mut UserProfilePopupState) {
     popup.scroll = popup.scroll.min(max_scroll);
 }
 
-const MAX_MESSAGE_AUTHOR_MEMBER_REQUEST_USERS: usize = 100;
+const MAX_GUILD_MEMBER_BY_ID_REQUEST_USERS: usize = 100;
 
 impl DashboardState {
     pub fn is_user_profile_popup_open(&self) -> bool {
@@ -289,6 +289,15 @@ impl DashboardState {
         guild_member_groups(members, roles)
     }
 
+    pub fn is_member_list_loading(&self) -> bool {
+        let Some(guild_id) = self.selected_guild_id() else {
+            return false;
+        };
+        self.discord
+            .guild(guild_id)
+            .is_some_and(|guild| guild.online_count.is_none())
+    }
+
     pub fn message_author_role_color(&self, message: &MessageState) -> Option<u32> {
         let channel = self.discord.channel(message.channel_id);
         let guild_id = message
@@ -341,19 +350,53 @@ impl DashboardState {
             .collect()
     }
 
+    pub fn initial_unknown_member_requests(&self) -> Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)> {
+        let Some(guild_id) = self.selected_guild_id() else {
+            return Vec::new();
+        };
+        if !self.is_member_list_loading() {
+            return Vec::new();
+        }
+
+        let user_ids = self
+            .discord
+            .members_for_guild(guild_id)
+            .into_iter()
+            .filter(|member| member.username.is_none() && member.display_name == "unknown")
+            .map(|member| member.user_id)
+            .take(MAX_GUILD_MEMBER_BY_ID_REQUEST_USERS)
+            .collect::<Vec<_>>();
+
+        if user_ids.is_empty() {
+            Vec::new()
+        } else {
+            vec![(guild_id, user_ids)]
+        }
+    }
+
     pub fn enqueue_message_author_member_requests(
         &mut self,
         requests: Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)>,
     ) {
+        self.enqueue_guild_member_by_id_requests(requests);
+    }
+
+    pub fn enqueue_guild_member_by_id_requests(
+        &mut self,
+        requests: Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)>,
+    ) -> bool {
+        let mut enqueued = false;
         for (guild_id, user_ids) in requests {
-            for chunk in user_ids.chunks(MAX_MESSAGE_AUTHOR_MEMBER_REQUEST_USERS) {
+            for chunk in user_ids.chunks(MAX_GUILD_MEMBER_BY_ID_REQUEST_USERS) {
                 self.pending_commands
                     .push_back(AppCommand::LoadGuildMembersByIds {
                         guild_id,
                         user_ids: chunk.to_vec(),
                     });
+                enqueued = true;
             }
         }
+        enqueued
     }
 
     pub fn member_role_color(&self, member: MemberEntry<'_>) -> Option<u32> {

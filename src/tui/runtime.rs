@@ -27,10 +27,10 @@ use super::{
         visible_dashboard_signature,
     },
     requests::{
-        ForumPostRequestTarget, ForumPostRequests, HistoryRequests, MemberListSubscriptionRequests,
-        MemberListSubscriptionTarget, MemberRequests, MentionMemberSearchRequests,
-        MentionMemberSearchTarget, MessageAuthorMemberRequests, PinnedMessageRequests,
-        ThreadPreviewRequests,
+        ForumPostRequestTarget, ForumPostRequests, HistoryRequests, InitialUnknownMemberRequests,
+        MemberListSubscriptionRequests, MemberListSubscriptionTarget, MemberRequests,
+        MentionMemberSearchRequests, MentionMemberSearchTarget, MessageAuthorMemberRequests,
+        PinnedMessageRequests, ThreadPreviewRequests,
     },
     state::DashboardState,
     ui,
@@ -67,6 +67,7 @@ pub(super) async fn run_dashboard(
     let mut forum_post_requests = ForumPostRequests::default();
     let mut pinned_message_requests = PinnedMessageRequests::default();
     let mut message_author_member_requests = MessageAuthorMemberRequests::default();
+    let mut initial_unknown_member_requests = InitialUnknownMemberRequests::default();
     let mut member_requests = MemberRequests::default();
     let mut mention_member_search_requests = MentionMemberSearchRequests::default();
     let mut member_list_subscription_requests = MemberListSubscriptionRequests::default();
@@ -530,6 +531,14 @@ pub(super) async fn run_dashboard(
                 command_helpers::record_command_channel_closed(&mut state);
                 dirty = true;
             }
+        }
+
+        let initial_unknown_requests = initial_unknown_member_requests.next(
+            state.initial_unknown_member_requests(),
+            std::time::Instant::now(),
+        );
+        if state.enqueue_guild_member_by_id_requests(initial_unknown_requests) {
+            dirty = true;
         }
 
         for (channel_id, latest_message_id) in

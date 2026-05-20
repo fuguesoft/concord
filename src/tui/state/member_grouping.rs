@@ -1,12 +1,15 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
-use crate::discord::ids::{Id, marker::UserMarker};
+use crate::discord::ids::{
+    Id,
+    marker::{RoleMarker, UserMarker},
+};
 
 use crate::discord::{ChannelRecipientState, ChannelState, GuildMemberState, RoleState};
 
 use super::presentation::{
-    is_direct_message_channel, is_online_status, primary_hoisted_role, sort_member_entries,
-    sort_recipient_entries, sorted_hoisted_roles,
+    is_direct_message_channel, is_online_status, sort_member_entries, sort_recipient_entries,
+    sorted_hoisted_roles,
 };
 
 #[derive(Debug)]
@@ -75,26 +78,32 @@ pub(super) fn guild_member_groups<'a>(
     roles: Vec<&'a RoleState>,
 ) -> Vec<MemberGroup<'a>> {
     let hoisted_roles = sorted_hoisted_roles(&roles);
+    let hoisted_role_ranks: HashMap<Id<RoleMarker>, usize> = hoisted_roles
+        .iter()
+        .enumerate()
+        .map(|(rank, role)| (role.id, rank))
+        .collect();
+    let mut role_entries: Vec<Vec<&GuildMemberState>> = vec![Vec::new(); hoisted_roles.len()];
     let mut groups: Vec<MemberGroup<'a>> = Vec::new();
-    let mut grouped_online: HashSet<Id<UserMarker>> = HashSet::new();
 
-    // Hoisted role groups list only online members (online/idle/dnd) to
-    // mirror the official Discord client's sidebar. Offline members from
-    // any role roll up into the bottom "Offline" group instead.
-    for role in hoisted_roles {
-        let mut entries: Vec<&GuildMemberState> = members
-            .iter()
-            .copied()
-            .filter(|member| {
-                is_online_status(member.status)
-                    && primary_hoisted_role(member, &roles) == Some(role.id)
-            })
-            .collect();
+    let mut online_unroled = Vec::new();
+    let mut offline = Vec::new();
+
+    for member in members {
+        if let Some(rank) = primary_hoisted_role_rank(member, &hoisted_role_ranks) {
+            role_entries[rank].push(member);
+        } else if is_online_status(member.status) {
+            online_unroled.push(member);
+        } else {
+            offline.push(member);
+        }
+    }
+
+    for (role, mut entries) in hoisted_roles.into_iter().zip(role_entries) {
         if entries.is_empty() {
             continue;
         }
         sort_member_entries(&mut entries);
-        grouped_online.extend(entries.iter().map(|member| member.user_id));
         groups.push(MemberGroup {
             label: role.name.clone(),
             color: role.color,
@@ -102,13 +111,6 @@ pub(super) fn guild_member_groups<'a>(
         });
     }
 
-    let mut online_unroled: Vec<&GuildMemberState> = members
-        .iter()
-        .copied()
-        .filter(|member| {
-            is_online_status(member.status) && !grouped_online.contains(&member.user_id)
-        })
-        .collect();
     if !online_unroled.is_empty() {
         sort_member_entries(&mut online_unroled);
         groups.push(MemberGroup {
@@ -118,10 +120,6 @@ pub(super) fn guild_member_groups<'a>(
         });
     }
 
-    let mut offline: Vec<&GuildMemberState> = members
-        .into_iter()
-        .filter(|member| !is_online_status(member.status))
-        .collect();
     if !offline.is_empty() {
         sort_member_entries(&mut offline);
         groups.push(MemberGroup {
@@ -132,6 +130,17 @@ pub(super) fn guild_member_groups<'a>(
     }
 
     groups
+}
+
+fn primary_hoisted_role_rank(
+    member: &GuildMemberState,
+    hoisted_role_ranks: &HashMap<Id<RoleMarker>, usize>,
+) -> Option<usize> {
+    member
+        .role_ids
+        .iter()
+        .filter_map(|role_id| hoisted_role_ranks.get(role_id).copied())
+        .min()
 }
 
 pub(super) fn channel_recipient_group(channel: &ChannelState) -> Vec<MemberGroup<'_>> {

@@ -959,7 +959,7 @@ fn member_panel_title_stays_plain_without_guild_total_or_in_direct_messages() {
 }
 
 #[test]
-fn member_groups_split_role_online_and_offline_buckets() {
+fn member_groups_keep_offline_hoisted_members_in_role_buckets() {
     let guild_id = Id::new(1);
     let admin_role = Id::new(100);
     let mut state = DashboardState::new();
@@ -1051,14 +1051,13 @@ fn member_groups_split_role_online_and_offline_buckets() {
         ]
     );
 
-    // Admin role group only carries the online admin (alice). The offline
-    // admin (amy) belongs to the Offline bucket.
+    // Hoisted role groups include both online and offline members.
     let admin_names: Vec<_> = groups[0]
         .entries
         .iter()
         .map(|m| m.display_name().to_owned())
         .collect();
-    assert_eq!(admin_names, vec!["alice".to_owned()]);
+    assert_eq!(admin_names, vec!["alice".to_owned(), "amy".to_owned()]);
 
     // Online group lists members with no hoisted role who aren't offline.
     let online_names: Vec<_> = groups[1]
@@ -1068,13 +1067,13 @@ fn member_groups_split_role_online_and_offline_buckets() {
         .collect();
     assert_eq!(online_names, vec!["bob".to_owned()]);
 
-    // Offline group merges everyone offline regardless of role.
+    // Offline group lists only offline members that did not enter a role group.
     let offline_names: Vec<_> = groups[2]
         .entries
         .iter()
         .map(|m| m.display_name().to_owned())
         .collect();
-    assert_eq!(offline_names, vec!["amy".to_owned(), "ben".to_owned()]);
+    assert_eq!(offline_names, vec!["ben".to_owned()]);
 }
 
 #[test]

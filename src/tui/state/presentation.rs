@@ -1,4 +1,3 @@
-use crate::discord::ids::{Id, marker::RoleMarker};
 use ratatui::style::Color;
 
 use crate::discord::{
@@ -47,19 +46,6 @@ pub(super) fn sorted_hoisted_roles<'a>(roles: &'a [&'a RoleState]) -> Vec<&'a Ro
     roles
 }
 
-pub(super) fn primary_hoisted_role(
-    member: &GuildMemberState,
-    roles: &[&RoleState],
-) -> Option<Id<RoleMarker>> {
-    member
-        .role_ids
-        .iter()
-        .filter_map(|role_id| roles.iter().find(|role| role.id == *role_id).copied())
-        .filter(|role| role.hoist)
-        .min_by(|left, right| role_display_order(left, right))
-        .map(|role| role.id)
-}
-
 fn role_display_order(left: &RoleState, right: &RoleState) -> std::cmp::Ordering {
     right
         .position
@@ -68,26 +54,20 @@ fn role_display_order(left: &RoleState, right: &RoleState) -> std::cmp::Ordering
 }
 
 pub(super) fn sort_member_entries(entries: &mut [&GuildMemberState]) {
-    entries.sort_by(|left, right| {
-        member_status_rank(left.status)
-            .cmp(&member_status_rank(right.status))
-            .then_with(|| {
-                left.display_name
-                    .to_lowercase()
-                    .cmp(&right.display_name.to_lowercase())
-            })
+    entries.sort_by_cached_key(|member| {
+        (
+            member_status_rank(member.status),
+            member.display_name.to_lowercase(),
+        )
     });
 }
 
 pub(super) fn sort_recipient_entries(entries: &mut [&ChannelRecipientState]) {
-    entries.sort_by(|left, right| {
-        member_status_rank(left.status)
-            .cmp(&member_status_rank(right.status))
-            .then_with(|| {
-                left.display_name
-                    .to_lowercase()
-                    .cmp(&right.display_name.to_lowercase())
-            })
+    entries.sort_by_cached_key(|recipient| {
+        (
+            member_status_rank(recipient.status),
+            recipient.display_name.to_lowercase(),
+        )
     });
 }
 

@@ -1711,16 +1711,24 @@ impl DashboardState {
         clamp_selected_index(self.selected_member, self.flattened_members().len())
     }
 
+    #[cfg(test)]
     pub fn focused_member_selection_line(&self) -> Option<usize> {
-        if self.focus == FocusPane::Members && !self.flattened_members().is_empty() {
-            let selected_line = self.selected_member_line();
-            if selected_line >= self.member_scroll
-                && selected_line < self.member_scroll + self.member_content_height()
-            {
-                Some(selected_line - self.member_scroll)
-            } else {
-                None
-            }
+        let groups = self.members_grouped();
+        self.focused_member_selection_line_in_groups(&groups)
+    }
+
+    pub fn focused_member_selection_line_in_groups(
+        &self,
+        groups: &[MemberGroup<'_>],
+    ) -> Option<usize> {
+        if self.focus != FocusPane::Members {
+            return None;
+        }
+        let selected_line = self.selected_member_line_in_groups(groups)?;
+        if selected_line >= self.member_scroll
+            && selected_line < self.member_scroll + self.member_content_height()
+        {
+            Some(selected_line - self.member_scroll)
         } else {
             None
         }
@@ -1746,8 +1754,13 @@ impl DashboardState {
         pane_content_height(self.member_view_height)
     }
 
+    #[cfg(test)]
     pub fn member_line_count(&self) -> usize {
         self.count_member_lines()
+    }
+
+    pub fn member_line_count_in_groups(&self, groups: &[MemberGroup<'_>]) -> usize {
+        self.count_member_lines_in_groups(groups)
     }
 
     pub fn set_member_view_height(&mut self, height: usize) {
@@ -2239,26 +2252,36 @@ impl DashboardState {
     }
 
     fn selected_member_line(&self) -> usize {
-        let selected_member = self.selected_member();
+        let groups = self.members_grouped();
+        self.selected_member_line_in_groups(&groups)
+            .unwrap_or_default()
+    }
+
+    fn selected_member_line_in_groups(&self, groups: &[MemberGroup<'_>]) -> Option<usize> {
+        let members_len: usize = groups.iter().map(|group| group.entries.len()).sum();
+        if members_len == 0 {
+            return None;
+        }
+        let selected_member = self.selected_member.min(members_len - 1);
         let mut member_index = 0usize;
         let mut line_index = 0usize;
-        for group in self.members_grouped() {
+        for group in groups {
             if line_index > 0 {
                 line_index += 1;
             }
             line_index += 1;
-            for member in group.entries {
+            for member in &group.entries {
                 if member_index == selected_member {
-                    return line_index;
+                    return Some(line_index);
                 }
                 member_index += 1;
                 line_index += 1;
-                if self.member_has_activity_row(member) {
+                if self.member_has_activity_row(*member) {
                     line_index += 1;
                 }
             }
         }
-        0
+        None
     }
 
     fn select_member_near_line(&mut self, target_line: usize) {
@@ -2298,15 +2321,20 @@ impl DashboardState {
     }
 
     fn count_member_lines(&self) -> usize {
+        let groups = self.members_grouped();
+        self.count_member_lines_in_groups(&groups)
+    }
+
+    fn count_member_lines_in_groups(&self, groups: &[MemberGroup<'_>]) -> usize {
         let mut lines = 0usize;
-        for group in self.members_grouped() {
+        for group in groups {
             if lines > 0 {
                 lines += 1;
             }
             lines += 1;
-            for member in group.entries {
+            for member in &group.entries {
                 lines += 1;
-                if self.member_has_activity_row(member) {
+                if self.member_has_activity_row(*member) {
                     lines += 1;
                 }
             }

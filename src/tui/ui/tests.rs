@@ -1712,6 +1712,10 @@ fn member_pane_keeps_normal_style_for_speaking_voice_members() {
         owner_id: None,
     });
     state.confirm_selected_guild();
+    state.push_event(AppEvent::GuildMemberListCounts {
+        guild_id,
+        online: 1,
+    });
     state.push_event(AppEvent::VoiceStateUpdate {
         state: VoiceStateInfo {
             guild_id,

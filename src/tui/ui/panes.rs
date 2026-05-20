@@ -1236,19 +1236,32 @@ pub(super) fn render_members(
     state: &DashboardState,
     emoji_images: &[EmojiImage<'_>],
 ) {
-    let groups = state.members_grouped();
+    let loading_members = state.is_member_list_loading();
+    let groups = if loading_members {
+        Vec::new()
+    } else {
+        state.members_grouped()
+    };
+    let scroll = state.member_scroll();
+    let content_height = state.member_content_height();
+    let visible_end = scroll.saturating_add(content_height);
     let mut lines: Vec<Line<'static>> = Vec::new();
     // (absolute_line_index, cdn_url) for activity rows that have a loaded emoji image.
     let mut emoji_line_urls: Vec<(usize, String)> = Vec::new();
     let content_width = (area.width as usize).saturating_sub(2);
     let max_name_width = (area.width as usize).saturating_sub(6).max(8);
     let selected_line = state
-        .focused_member_selection_line()
+        .focused_member_selection_line_in_groups(&groups)
         .map(|line| line + state.member_scroll());
     let focused = state.focus() == FocusPane::Members;
     let mut line_index = 0usize;
 
-    if groups.is_empty() {
+    if loading_members {
+        lines.push(Line::from(Span::styled(
+            "Loading...",
+            Style::default().fg(DIM),
+        )));
+    } else if groups.is_empty() {
         lines.push(Line::from(Span::styled(
             "No members loaded yet.",
             Style::default().fg(DIM),
@@ -1256,33 +1269,39 @@ pub(super) fn render_members(
     }
 
     for group in &groups {
-        if !lines.is_empty() {
-            lines.push(Line::from(""));
+        if line_index > 0 {
+            if line_index >= scroll && line_index < visible_end {
+                lines.push(Line::from(""));
+            }
             line_index += 1;
         }
-        lines.push(member_group_header(group, content_width));
+        if line_index >= scroll && line_index < visible_end {
+            lines.push(member_group_header(group, content_width));
+        }
         line_index += 1;
         for member in &group.entries {
             let member = *member;
-            let is_selected = focused && selected_line == Some(line_index);
-            let marker_style = Style::default().fg(presence_color(member.status()));
-            let name_style =
-                member_name_style(member, state.member_role_color(member), is_selected);
+            if line_index >= scroll && line_index < visible_end {
+                let is_selected = focused && selected_line == Some(line_index);
+                let marker_style = Style::default().fg(presence_color(member.status()));
+                let name_style =
+                    member_name_style(member, state.member_role_color(member), is_selected);
 
-            let display_name = state.member_display_name(member);
-            let display = member_display_label(
-                member,
-                &display_name,
-                state.member_horizontal_scroll(),
-                max_name_width,
-            );
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!(" {} ", presence_marker(member.status())),
-                    marker_style,
-                ),
-                Span::styled(display, name_style),
-            ]));
+                let display_name = state.member_display_name(member);
+                let display = member_display_label(
+                    member,
+                    &display_name,
+                    state.member_horizontal_scroll(),
+                    max_name_width,
+                );
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!(" {} ", presence_marker(member.status())),
+                        marker_style,
+                    ),
+                    Span::styled(display, name_style),
+                ]));
+            }
             line_index += 1;
 
             if !matches!(
@@ -1290,57 +1309,60 @@ pub(super) fn render_members(
                 PresenceStatus::Offline | PresenceStatus::Unknown
             ) {
                 let activities = state.user_activities(member.user_id());
-                if let Some(render) = primary_activity_summary(activities, emoji_images) {
+                if !activities.is_empty() {
                     let h_scroll = state.member_horizontal_scroll();
-                    let line = match render.leading {
-                        ActivityLeading::Image(url) => {
-                            let body = truncate_display_width_from(
-                                &render.body,
-                                h_scroll,
-                                max_name_width.saturating_sub(3),
-                            );
-                            emoji_line_urls.push((line_index, url));
-                            Line::from(vec![
-                                Span::raw("     "),
-                                Span::styled(body, Style::default().fg(DIM)),
-                            ])
-                        }
-                        ActivityLeading::Icon(icon) => {
-                            let body = truncate_display_width_from(
-                                &render.body,
-                                h_scroll,
-                                max_name_width.saturating_sub(2),
-                            );
-                            Line::from(vec![
-                                Span::raw("   "),
-                                Span::styled(icon.to_string(), Style::default().fg(Color::Green)),
-                                Span::raw(" "),
-                                Span::styled(body, Style::default().fg(DIM)),
-                            ])
-                        }
-                        ActivityLeading::None => {
-                            let body =
-                                truncate_display_width_from(&render.body, h_scroll, max_name_width);
-                            Line::from(vec![
-                                Span::raw("   "),
-                                Span::styled(body, Style::default().fg(DIM)),
-                            ])
-                        }
-                    };
-                    lines.push(line);
+                    if line_index >= scroll
+                        && line_index < visible_end
+                        && let Some(render) = primary_activity_summary(activities, emoji_images)
+                    {
+                        let line = match render.leading {
+                            ActivityLeading::Image(url) => {
+                                let body = truncate_display_width_from(
+                                    &render.body,
+                                    h_scroll,
+                                    max_name_width.saturating_sub(3),
+                                );
+                                emoji_line_urls.push((line_index, url));
+                                Line::from(vec![
+                                    Span::raw("     "),
+                                    Span::styled(body, Style::default().fg(DIM)),
+                                ])
+                            }
+                            ActivityLeading::Icon(icon) => {
+                                let body = truncate_display_width_from(
+                                    &render.body,
+                                    h_scroll,
+                                    max_name_width.saturating_sub(2),
+                                );
+                                Line::from(vec![
+                                    Span::raw("   "),
+                                    Span::styled(
+                                        icon.to_string(),
+                                        Style::default().fg(Color::Green),
+                                    ),
+                                    Span::raw(" "),
+                                    Span::styled(body, Style::default().fg(DIM)),
+                                ])
+                            }
+                            ActivityLeading::None => {
+                                let body = truncate_display_width_from(
+                                    &render.body,
+                                    h_scroll,
+                                    max_name_width,
+                                );
+                                Line::from(vec![
+                                    Span::raw("   "),
+                                    Span::styled(body, Style::default().fg(DIM)),
+                                ])
+                            }
+                        };
+                        lines.push(line);
+                    }
                     line_index += 1;
                 }
             }
         }
     }
-
-    let scroll = state.member_scroll();
-    let content_height = state.member_content_height();
-    let lines: Vec<_> = lines
-        .into_iter()
-        .skip(scroll)
-        .take(content_height)
-        .collect();
 
     let block = panel_block_line(state.member_panel_title(), focused);
     let content_area = block.inner(area);
@@ -1371,7 +1393,7 @@ pub(super) fn render_members(
         panel_scrollbar_area(area),
         scroll,
         content_height,
-        state.member_line_count(),
+        state.member_line_count_in_groups(&groups),
     );
 }
 
