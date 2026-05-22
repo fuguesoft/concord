@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.7] - 2026-05-23
+
+### Bug Fixes
+
+- Avoid report all keys as escape code by @chojs23
+- Improve clipboard paste priority by @chojs23
+- Fix stale MESSAGE_ACK from reopening unread state (#119) in [#119](https://github.com/chojs23/concord/pull/119) by @chojs23
+- _(tui)_ Keep guild filter pane width stable by @chojs23
+- Fix forum preview message by @chojs23
+
+### Documentation
+
+- Update keybinding docs by @chojs23
+
+### Features
+
+- Add optional circular avatar masking (#121) in [#121](https://github.com/chojs23/concord/pull/121) by @StaszeKrk
+
+### Refactor
+
+- Refactor repeated test DTO by @chojs23
+- Move tui state to client backend by @chojs23
+- Move TUI backend request handling into Discord client by @chojs23
+
+### New Contributors
+
+- @StaszeKrk made their first contribution in [#121](https://github.com/chojs23/concord/pull/121)
+- @CX330Blake made their first contribution in [#117](https://github.com/chojs23/concord/pull/117)
+
 ## [2.0.6] - 2026-05-21
 
 ### Bug Fixes
