@@ -2,10 +2,10 @@ use serde_json::Value;
 
 use crate::{
     discord::{
-        AttachmentInfo, EmbedFieldInfo, EmbedInfo, MentionInfo, MessageInfo,
+        AttachmentInfo, AttachmentUpdate, EmbedFieldInfo, EmbedInfo, MentionInfo, MessageInfo,
         MessageInteractionInfo, MessageKind, MessageReferenceInfo, MessageSnapshotInfo,
         PollAnswerInfo, PollInfo, ReactionEmoji, ReactionInfo, ReplyInfo,
-        events::{AppEvent, AttachmentUpdate},
+        events::AppEvent,
         ids::{
             Id,
             marker::{

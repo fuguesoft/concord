@@ -1,8 +1,9 @@
 use serde_json::Value;
 
 use crate::discord::{
-    ChannelInfo, ChannelRecipientInfo, ThreadMetadataInfo,
-    events::{AppEvent, PermissionOverwriteInfo, PermissionOverwriteKind},
+    ChannelInfo, ChannelRecipientInfo, PermissionOverwriteInfo, PermissionOverwriteKind,
+    ThreadMetadataInfo,
+    events::AppEvent,
     ids::{
         Id,
         marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker},
