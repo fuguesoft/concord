@@ -529,6 +529,8 @@ sequence if you want direct keys for them.
 | `JumpBottom`              | `"G"`                              | Jump to the bottom.                          |
 | `ScrollHorizontalLeft`    | `"H"`                              | Scroll focused pane horizontally left.       |
 | `ScrollHorizontalRight`   | `"L"`                              | Scroll focused pane horizontally right.      |
+| `ResizePaneLeft`          | `["<A-h>", "<A-left>"]`           | Shrink the focused pane width.               |
+| `ResizePaneRight`         | `["<A-l>", "<A-right>"]`          | Grow the focused pane width.                 |
 | `Quit`                    | `"q"`                              | Quit Concord.                                |
 | `CopyMessage`             | `"y"`                              | Copy selected message content.               |
 | `ReactMessage`            | `"r"`                              | Add or remove a reaction.                    |
@@ -674,6 +676,8 @@ JumpTop = "g"
 JumpBottom = "G"
 ScrollHorizontalLeft = "H"
 ScrollHorizontalRight = "L"
+ResizePaneLeft = { keys = ["<A-h>", "<A-left>"] }
+ResizePaneRight = { keys = ["<A-l>", "<A-right>"] }
 Quit = "q"
 CopyMessage = "y"
 ReactMessage = "r"

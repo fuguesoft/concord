@@ -121,6 +121,8 @@ pub(in crate::tui) enum UiAction {
     JumpBottom,
     ScrollHorizontalLeft,
     ScrollHorizontalRight,
+    ResizePaneLeft,
+    ResizePaneRight,
     Quit,
     CopyMessage,
     ReactMessage,
@@ -1161,6 +1163,8 @@ impl UiAction {
             UiAction::JumpBottom => "JumpBottom",
             UiAction::ScrollHorizontalLeft => "ScrollHorizontalLeft",
             UiAction::ScrollHorizontalRight => "ScrollHorizontalRight",
+            UiAction::ResizePaneLeft => "ResizePaneLeft",
+            UiAction::ResizePaneRight => "ResizePaneRight",
             UiAction::Quit => "Quit",
             UiAction::CopyMessage => "CopyMessage",
             UiAction::ReactMessage => "ReactMessage",
@@ -1202,6 +1206,8 @@ impl UiAction {
             UiAction::JumpBottom => "jump bottom",
             UiAction::ScrollHorizontalLeft => "scroll left",
             UiAction::ScrollHorizontalRight => "scroll right",
+            UiAction::ResizePaneLeft => "resize pane left",
+            UiAction::ResizePaneRight => "resize pane right",
             UiAction::Quit => "quit",
             UiAction::CopyMessage => "copy message",
             UiAction::ReactMessage => "react",
@@ -1345,6 +1351,8 @@ fn all_ui_actions() -> &'static [UiAction] {
         UiAction::JumpBottom,
         UiAction::ScrollHorizontalLeft,
         UiAction::ScrollHorizontalRight,
+        UiAction::ResizePaneLeft,
+        UiAction::ResizePaneRight,
         UiAction::Quit,
         UiAction::CopyMessage,
         UiAction::ReactMessage,
@@ -1725,6 +1733,14 @@ fn default_keymap_specs(leader: KeyChord) -> BTreeMap<UiAction, KeyMapActionSpec
             UiAction::JumpBottom => vec![vec![char_chord('G')]],
             UiAction::ScrollHorizontalLeft => vec![vec![char_chord('H')]],
             UiAction::ScrollHorizontalRight => vec![vec![char_chord('L')]],
+            UiAction::ResizePaneLeft => vec![
+                vec![modified_key_chord(KeyCode::Char('h'), KeyModifiers::ALT)],
+                vec![modified_key_chord(KeyCode::Left, KeyModifiers::ALT)],
+            ],
+            UiAction::ResizePaneRight => vec![
+                vec![modified_key_chord(KeyCode::Char('l'), KeyModifiers::ALT)],
+                vec![modified_key_chord(KeyCode::Right, KeyModifiers::ALT)],
+            ],
             UiAction::Quit => vec![vec![char_chord('q')]],
             UiAction::CopyMessage => vec![vec![char_chord('y')]],
             UiAction::ReactMessage => vec![vec![char_chord('r')]],
@@ -1928,6 +1944,8 @@ impl KeyBindings {
             UiAction::JumpBottom => Some(DashboardAction::JumpBottom),
             UiAction::ScrollHorizontalLeft => Some(DashboardAction::ScrollHorizontalLeft),
             UiAction::ScrollHorizontalRight => Some(DashboardAction::ScrollHorizontalRight),
+            UiAction::ResizePaneLeft => Some(DashboardAction::ResizePaneLeft),
+            UiAction::ResizePaneRight => Some(DashboardAction::ResizePaneRight),
             UiAction::Quit => Some(DashboardAction::Quit),
             UiAction::CopyMessage if focus == FocusPane::Messages => Some(
                 DashboardAction::MessageShortcut(MessageShortcutAction::CopyContent),
@@ -1971,12 +1989,6 @@ impl KeyBindings {
 
         match key.code {
             KeyCode::Esc => Some(DashboardAction::Back),
-            KeyCode::Char('h') | KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => {
-                Some(DashboardAction::ResizePaneLeft)
-            }
-            KeyCode::Char('l') | KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => {
-                Some(DashboardAction::ResizePaneRight)
-            }
             KeyCode::Char('J') if focus == FocusPane::Messages => {
                 Some(DashboardAction::ScrollMessageViewportDown)
             }
@@ -3541,6 +3553,78 @@ mod tests {
         assert_eq!(
             key_bindings
                 .keymap_lookup_root_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)),
+            None
+        );
+    }
+
+    #[test]
+    fn default_keymap_maps_resize_shortcuts_to_dashboard_actions() {
+        let key_bindings = KeyBindings::default();
+
+        let cases = [
+            (
+                KeyEvent::new(KeyCode::Char('h'), KeyModifiers::ALT),
+                UiAction::ResizePaneLeft,
+                DashboardAction::ResizePaneLeft,
+            ),
+            (
+                KeyEvent::new(KeyCode::Left, KeyModifiers::ALT),
+                UiAction::ResizePaneLeft,
+                DashboardAction::ResizePaneLeft,
+            ),
+            (
+                KeyEvent::new(KeyCode::Char('l'), KeyModifiers::ALT),
+                UiAction::ResizePaneRight,
+                DashboardAction::ResizePaneRight,
+            ),
+            (
+                KeyEvent::new(KeyCode::Right, KeyModifiers::ALT),
+                UiAction::ResizePaneRight,
+                DashboardAction::ResizePaneRight,
+            ),
+        ];
+
+        for (key, ui_action, dashboard_action) in cases {
+            assert_eq!(key_bindings.keymap_lookup_direct_key(key), Some(ui_action));
+            assert_eq!(
+                key_bindings.dashboard_action_for_ui_action(ui_action, FocusPane::Messages),
+                Some(dashboard_action)
+            );
+        }
+    }
+
+    #[test]
+    fn keymap_can_remap_resize_actions() {
+        let keymap = KeymapOptions {
+            mappings: [
+                ("ResizePaneLeft".to_owned(), KeymapBinding::one("<C-h>")),
+                ("ResizePaneRight".to_owned(), KeymapBinding::one("<C-l>")),
+            ]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        };
+        let key_bindings =
+            KeyBindings::try_from_options(&keymap).expect("resize keys should parse");
+
+        assert_eq!(
+            key_bindings
+                .keymap_lookup_direct_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL)),
+            Some(UiAction::ResizePaneLeft)
+        );
+        assert_eq!(
+            key_bindings
+                .keymap_lookup_direct_key(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL)),
+            Some(UiAction::ResizePaneRight)
+        );
+        assert_eq!(
+            key_bindings
+                .keymap_lookup_direct_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::ALT)),
+            None
+        );
+        assert_eq!(
+            key_bindings
+                .keymap_lookup_direct_key(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::ALT)),
             None
         );
     }
