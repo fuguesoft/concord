@@ -585,7 +585,7 @@ fn selected_grouped_continuation_shows_time_gutter() {
         &messages,
         Some(1),
         &state,
-        super::super::message_viewport_layout(200, 80, 80, 16, 3),
+        super::default_message_viewport_layout(),
         &[],
     );
     let texts = line_texts_from_ratatui(&lines);
@@ -763,14 +763,14 @@ fn selected_message_media_moves_inside_border() {
         &messages,
         None,
         &DashboardState::new(),
-        super::super::message_viewport_layout(40, 80, selected_message_card_width(80, true), 16, 3),
+        super::selected_message_viewport_layout(40),
         &[],
     ));
     let selected = line_texts_from_ratatui(&message_viewport_lines(
         &messages,
         Some(0),
         &DashboardState::new(),
-        super::super::message_viewport_layout(40, 80, selected_message_card_width(80, true), 16, 3),
+        super::selected_message_viewport_layout(40),
         &[],
     ));
 

@@ -2,11 +2,9 @@ use std::collections::BTreeMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-#[cfg(test)]
-use super::state::MessageActionKind;
 use super::state::{
     ChannelActionItem, ChannelActionKind, EmojiReactionItem, FocusPane, GuildActionItem,
-    GuildActionKind, MemberActionItem, MemberActionKind, MessageActionItem,
+    GuildActionKind, MemberActionItem, MemberActionKind, MessageActionItem, MessageActionKind,
 };
 use crate::{
     config::{KeymapBinding, KeymapOptions},
@@ -24,9 +22,9 @@ pub(in crate::tui) use actions::{
     DashboardAction, DebugLogPopupAction, EmojiReactionPickerAction, GlobalAction,
     LeaderActionMenuAction, LoginBusyAction, LoginGlobalAction, LoginMfaSelectAction,
     LoginModeSelectAction, LoginPasswordInputAction, LoginTextInputAction,
-    MessageConfirmationAction, MessageShortcutAction, OptionsPopupAction, PaneFilterAction,
-    PollVotePickerAction, PopupListAction, ProfilePopupAction, ReactionUsersPopupAction,
-    ScrollAction, SelectionAction, SelectionKeySet, UiAction,
+    MessageConfirmationAction, OptionsPopupAction, PaneFilterAction, PollVotePickerAction,
+    PopupListAction, ProfilePopupAction, ReactionUsersPopupAction, ScrollAction, SelectionAction,
+    SelectionKeySet, UiAction,
 };
 pub(in crate::tui) use chord::KeyChord;
 #[cfg(test)]
@@ -1946,6 +1944,51 @@ mod tests {
     }
 
     #[test]
+    fn keymap_maps_message_shortcuts_to_message_actions() {
+        let key_bindings = KeyBindings::default();
+        let cases = [
+            (UiAction::CopyMessage, MessageActionKind::CopyContent),
+            (
+                UiAction::ReactMessage,
+                MessageActionKind::OpenReactionPicker,
+            ),
+            (UiAction::ReplyMessage, MessageActionKind::Reply),
+            (
+                UiAction::DeleteMessage,
+                MessageActionKind::OpenDeleteConfirmation,
+            ),
+            (UiAction::EditMessage, MessageActionKind::Edit),
+            (UiAction::OpenMessageUrl, MessageActionKind::OpenUrl),
+            (
+                UiAction::ViewMessageAttachment,
+                MessageActionKind::ViewAttachment,
+            ),
+            (UiAction::ShowMessageProfile, MessageActionKind::ShowProfile),
+            (UiAction::PinMessage, MessageActionKind::OpenPinConfirmation),
+            (UiAction::OpenThread, MessageActionKind::OpenThread),
+            (
+                UiAction::ShowReactionUsers,
+                MessageActionKind::ShowReactionUsers,
+            ),
+            (
+                UiAction::OpenPollVotePicker,
+                MessageActionKind::OpenPollVotePicker,
+            ),
+        ];
+
+        for (ui_action, message_action) in cases {
+            assert_eq!(
+                key_bindings.dashboard_action_for_ui_action(ui_action, FocusPane::Messages),
+                Some(DashboardAction::MessageShortcut(message_action))
+            );
+            assert_eq!(
+                key_bindings.dashboard_action_for_ui_action(ui_action, FocusPane::Channels),
+                None
+            );
+        }
+    }
+
+    #[test]
     fn keymap_rejects_fixed_control_selection_keys() {
         for key in ["<C-n>", "<C-p>"] {
             let keymap = KeymapOptions {
@@ -2079,6 +2122,14 @@ mod tests {
         }];
 
         assert_eq!(key_bindings.keymap_prefix_title(&prefix), "Window");
+    }
+
+    #[test]
+    fn keymap_uses_default_group_title() {
+        let key_bindings = KeyBindings::default();
+        let prefix = [key_bindings.keymap.leader, char_chord('v')];
+
+        assert_eq!(key_bindings.keymap_prefix_title(&prefix), "Voice");
     }
 
     #[test]

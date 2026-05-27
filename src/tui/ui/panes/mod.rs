@@ -15,8 +15,11 @@ use crate::discord::{
 };
 
 use super::super::{
-    format::{sanitize_for_display_width, truncate_display_width, truncate_display_width_from},
-    message_format::{EMOJI_REACTION_IMAGE_WIDTH, format_attachment_summary, wrap_text_lines},
+    format::{
+        format_byte_size, sanitize_for_display_width, truncate_display_width,
+        truncate_display_width_from,
+    },
+    message::format::{EMOJI_REACTION_IMAGE_WIDTH, format_attachment_summary, wrap_text_lines},
     state::{
         ChannelPaneEntry, CommandPickerEntry, DashboardState, EmojiPickerEntry, FocusPane,
         GuildPaneEntry, MAX_MENTION_PICKER_VISIBLE, MemberEntry, MemberGroup, MentionPickerEntry,

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::discord::{ChannelState, ChannelUnreadState};
+use crate::tui::text_cursor::{clamp_cursor_index, next_char_boundary, previous_char_boundary};
 use crate::{
     discord::ids::{
         Id,
@@ -8,7 +9,6 @@ use crate::{
     },
     tui::fuzzy::{FuzzyMatchQuality, FuzzyScore, fuzzy_name_match_score},
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 use crate::tui::fuzzy::fuzzy_text_score;
 use crate::tui::keybindings::SelectionAction;
@@ -474,30 +474,4 @@ fn channel_switcher_channel_label(channel: &ChannelState) -> String {
     } else {
         format!("#{}", channel.name)
     }
-}
-
-fn clamp_cursor_index(value: &str, index: usize) -> usize {
-    let mut index = index.min(value.len());
-    while index > 0 && !value.is_char_boundary(index) {
-        index -= 1;
-    }
-    index
-}
-
-fn previous_char_boundary(value: &str, index: usize) -> usize {
-    let index = clamp_cursor_index(value, index);
-    value[..index]
-        .grapheme_indices(true)
-        .next_back()
-        .map(|(start, _)| start)
-        .unwrap_or(0)
-}
-
-fn next_char_boundary(value: &str, index: usize) -> usize {
-    let index = clamp_cursor_index(value, index);
-    value[index..]
-        .grapheme_indices(true)
-        .nth(1)
-        .map(|(offset, _)| index + offset)
-        .unwrap_or(value.len())
 }

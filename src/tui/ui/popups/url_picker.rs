@@ -35,19 +35,14 @@ pub(in crate::tui::ui) fn message_url_picker_lines(
     urls.iter()
         .enumerate()
         .map(|(index, item)| {
-            let marker = if index == selected { "› " } else { "  " };
+            let selected = index == selected;
             let shortcut = shortcut_prefix(
                 crate::tui::keybindings::KeyBindings::default().indexed_shortcut(index),
             );
-            let mut style = Style::default();
-            if index == selected {
-                style = style
-                    .bg(Color::Rgb(40, 45, 90))
-                    .add_modifier(Modifier::BOLD);
-            }
+            let style = selectable_popup_label_style(selected, true);
             Line::from(vec![
-                Span::styled(marker, Style::default().fg(ACCENT)),
-                Span::styled(shortcut, Style::default().fg(DIM)),
+                selectable_popup_marker(selected),
+                selectable_popup_shortcut_span(shortcut),
                 Span::styled(item.label.to_owned(), style),
             ])
         })
@@ -67,8 +62,5 @@ fn truncate_message_url_picker_lines(
     lines: Vec<Line<'static>>,
     width: usize,
 ) -> Vec<Line<'static>> {
-    lines
-        .into_iter()
-        .map(|line| truncate_line_to_display_width(line, width.max(1)))
-        .collect()
+    truncate_popup_lines(lines, width.max(1))
 }

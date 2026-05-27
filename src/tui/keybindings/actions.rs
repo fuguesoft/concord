@@ -78,7 +78,7 @@ pub(in crate::tui) enum GlobalAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::tui) enum DashboardAction {
     Select(SelectionAction),
-    MessageShortcut(MessageShortcutAction),
+    MessageShortcut(MessageActionKind),
     Back,
     Quit,
     StartComposer,
@@ -97,22 +97,6 @@ pub(in crate::tui) enum DashboardAction {
     ScrollHorizontalLeft,
     ScrollHorizontalRight,
     ActivateFocused,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::tui) enum MessageShortcutAction {
-    CopyContent,
-    OpenReactionPicker,
-    Reply,
-    OpenDeleteConfirmation,
-    Edit,
-    OpenUrl,
-    ViewAttachment,
-    ShowProfile,
-    OpenPinConfirmation,
-    OpenThread,
-    ShowReactionUsers,
-    OpenPollVotePicker,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

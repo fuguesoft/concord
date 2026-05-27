@@ -1,21 +1,17 @@
 mod clipboard;
 mod commands;
-mod effects;
-mod events;
 mod format;
 mod fuzzy;
 mod input;
 mod keybindings;
 mod login;
 mod media;
-mod message_format;
-mod message_rows;
-mod message_time;
-mod redraw;
+mod message;
 mod runtime;
 mod selection;
 mod state;
 mod terminal;
+mod text_cursor;
 mod ui;
 
 use tokio::sync::{mpsc, watch};
@@ -70,11 +66,13 @@ mod tests {
     };
 
     use super::{
-        effects::{self, applescript_string, effect_forces_redraw},
         media::{AvatarImageCache, EmojiImageCache, ImagePreviewCache},
-        redraw::{
-            should_redraw_after_visible_signature_change,
-            should_suppress_image_redraw_for_signature_change, visible_dashboard_signature,
+        runtime::{
+            effects::{self, applescript_string, effect_forces_redraw},
+            redraw::{
+                should_redraw_after_visible_signature_change,
+                should_suppress_image_redraw_for_signature_change, visible_dashboard_signature,
+            },
         },
     };
     use crate::tui::state::{DashboardState, FocusPane};

@@ -1,8 +1,8 @@
 use crate::discord::AppCommand;
 use crate::tui::keybindings::{
-    DashboardAction, MessageShortcutAction, OptionsCategoryShortcut, SelectionAction, UiAction,
+    DashboardAction, OptionsCategoryShortcut, SelectionAction, UiAction,
 };
-use crate::tui::state::{DashboardState, FocusPane, MessageActionKind};
+use crate::tui::state::{DashboardState, FocusPane};
 
 pub(super) fn handle_dashboard_action(
     state: &mut DashboardState,
@@ -18,7 +18,7 @@ pub(super) fn handle_dashboard_action(
             state.move_up();
             state.next_older_history_command()
         }
-        DashboardAction::MessageShortcut(action) => handle_message_shortcut_action(state, action),
+        DashboardAction::MessageShortcut(kind) => state.activate_message_action_kind(kind),
         DashboardAction::Back => {
             if !state.return_from_pinned_message_view() {
                 state.return_from_opened_thread();
@@ -109,48 +109,6 @@ pub(super) fn handle_dashboard_action(
             }
             FocusPane::Messages => state.activate_selected_message_pane_item(),
         },
-    }
-}
-
-fn handle_message_shortcut_action(
-    state: &mut DashboardState,
-    action: MessageShortcutAction,
-) -> Option<AppCommand> {
-    match action {
-        MessageShortcutAction::CopyContent => {
-            state.activate_message_action_kind(MessageActionKind::CopyContent)
-        }
-        MessageShortcutAction::OpenReactionPicker => {
-            state.activate_message_action_kind(MessageActionKind::OpenReactionPicker)
-        }
-        MessageShortcutAction::Reply => {
-            state.activate_message_action_kind(MessageActionKind::Reply)
-        }
-        MessageShortcutAction::OpenDeleteConfirmation => {
-            state.activate_message_action_kind(MessageActionKind::OpenDeleteConfirmation)
-        }
-        MessageShortcutAction::Edit => state.activate_message_action_kind(MessageActionKind::Edit),
-        MessageShortcutAction::OpenUrl => {
-            state.activate_message_action_kind(MessageActionKind::OpenUrl)
-        }
-        MessageShortcutAction::ViewAttachment => {
-            state.activate_message_action_kind(MessageActionKind::ViewAttachment)
-        }
-        MessageShortcutAction::ShowProfile => {
-            state.activate_message_action_kind(MessageActionKind::ShowProfile)
-        }
-        MessageShortcutAction::OpenPinConfirmation => {
-            state.activate_message_action_kind(MessageActionKind::OpenPinConfirmation)
-        }
-        MessageShortcutAction::OpenThread => {
-            state.activate_message_action_kind(MessageActionKind::OpenThread)
-        }
-        MessageShortcutAction::ShowReactionUsers => {
-            state.activate_message_action_kind(MessageActionKind::ShowReactionUsers)
-        }
-        MessageShortcutAction::OpenPollVotePicker => {
-            state.activate_message_action_kind(MessageActionKind::OpenPollVotePicker)
-        }
     }
 }
 

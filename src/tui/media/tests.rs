@@ -13,7 +13,7 @@ use crate::{
         MessageSnapshotInfo, ReactionEmoji, ReactionInfo,
     },
     tui::{
-        message_time::test_message_id_for_unix_millis,
+        message::time::test_message_id_for_unix_millis,
         state::{DashboardState, FocusPane},
         ui::ImagePreviewLayout,
     },
@@ -1214,7 +1214,7 @@ fn image_preview_loaded_bytes_start_decode_jobs_for_loading_entries() {
         },
     );
 
-    let jobs = cache.decode_jobs_for_loaded_keys(vec![key.clone()], b"image bytes", (10, 20));
+    let jobs = cache.decode_jobs_for_loaded_keys(vec![key.clone()], b"image bytes");
 
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].key, key);

@@ -56,7 +56,7 @@ pub(in crate::tui::ui) fn options_popup_lines(
         .skip(start)
         .take(visible_items)
         .flat_map(|(index, item)| {
-            let marker = if index == selected { "› " } else { "  " };
+            let selected = index == selected;
             let control = item.value.as_ref().map_or_else(
                 || {
                     if item.enabled {
@@ -67,18 +67,9 @@ pub(in crate::tui::ui) fn options_popup_lines(
                 },
                 |value| format!("[{value}]"),
             );
-            let mut style = if item.effective || index == 0 {
-                Style::default()
-            } else {
-                Style::default().fg(DIM)
-            };
-            if index == selected {
-                style = style
-                    .bg(Color::Rgb(40, 45, 90))
-                    .add_modifier(Modifier::BOLD);
-            }
+            let style = selectable_popup_label_style(selected, item.effective || index == 0);
             let row = Line::from(vec![
-                Span::styled(marker, Style::default().fg(ACCENT)),
+                selectable_popup_marker(selected),
                 Span::styled(format!("{control} "), style),
                 Span::styled(item.label, style),
                 Span::styled(" - ", Style::default().fg(DIM)),

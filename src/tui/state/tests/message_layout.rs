@@ -2,84 +2,22 @@ use super::*;
 
 #[test]
 fn video_attachment_does_not_reserve_image_preview_rows() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("clip".to_owned()),
-        mentions: Vec::new(),
-        attachments: vec![video_attachment(1)],
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("clip");
+    message.attachments = vec![video_attachment(1)];
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 4);
 }
 
 #[test]
 fn explicit_newlines_increase_message_rendered_height() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("hello\nworld".to_owned()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let message = height_test_message("hello\nworld");
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 4);
 }
 
 #[test]
 fn wrapped_content_increases_message_rendered_height() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("abcdefghijkl".to_owned()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let message = height_test_message("abcdefghijkl");
 
     assert_eq!(message_rendered_height(&message, 5, 16, 3), 5);
 }
@@ -178,236 +116,75 @@ fn forwarded_mentions_affect_height_from_source_channel_guild() {
         guild_id: Id::new(2),
         member: member_info(Id::new(10), "a"),
     });
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: vec![MessageSnapshotInfo {
-            content: Some("<@10><@10>".to_owned()),
-            source_channel_id: Some(Id::new(9)),
-            ..MessageSnapshotInfo::test()
-        }],
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.forwarded_snapshots = vec![MessageSnapshotInfo {
+        content: Some("<@10><@10>".to_owned()),
+        source_channel_id: Some(Id::new(9)),
+        ..MessageSnapshotInfo::test()
+    }];
 
     assert_eq!(state.message_base_line_count_for_width(&message, 7), 4);
 }
 
 #[test]
 fn wide_content_increases_message_rendered_height_by_terminal_width() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("漢字仮名交じ".to_owned()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let message = height_test_message("漢字仮名交じ");
 
     assert_eq!(message_rendered_height(&message, 10, 16, 3), 4);
 }
 
 #[test]
 fn discord_embed_rows_increase_message_rendered_height() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_owned()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: vec![youtube_embed()],
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    message.embeds = vec![youtube_embed()];
 
     assert_eq!(message_rendered_height(&message, 80, 16, 3), 9);
 }
 
 #[test]
 fn image_attachment_summary_reserves_text_row_before_preview() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("look".to_owned()),
-        mentions: Vec::new(),
-        attachments: vec![image_attachment(1)],
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("look");
+    message.attachments = vec![image_attachment(1)];
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 7);
 }
 
 #[test]
 fn five_image_album_rendered_height_lists_each_attachment_but_keeps_album_bounded() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("look".to_owned()),
-        mentions: Vec::new(),
-        attachments: (1..=5).map(image_attachment).collect(),
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("look");
+    message.attachments = (1..=5).map(image_attachment).collect();
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 12);
 }
 
 #[test]
 fn forwarded_image_attachment_reserves_preview_rows() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: vec![forwarded_snapshot(1)],
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.forwarded_snapshots = vec![forwarded_snapshot(1)];
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 8);
 }
 
 #[test]
 fn forwarded_snapshot_wrapped_content_increases_rendered_height() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: vec![MessageSnapshotInfo {
-            content: Some("abcdefghijkl".to_owned()),
-            attachments: vec![image_attachment(1)],
-            ..MessageSnapshotInfo::test()
-        }],
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.forwarded_snapshots = vec![MessageSnapshotInfo {
+        content: Some("abcdefghijkl".to_owned()),
+        attachments: vec![image_attachment(1)],
+        ..MessageSnapshotInfo::test()
+    }];
 
     assert_eq!(message_rendered_height(&message, 7, 16, 3), 10);
 }
 
 #[test]
 fn forwarded_snapshot_wide_content_uses_terminal_width() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: vec![MessageSnapshotInfo {
-            content: Some("漢字仮名交じ".to_owned()),
-            attachments: vec![image_attachment(1)],
-            ..MessageSnapshotInfo::test()
-        }],
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.forwarded_snapshots = vec![MessageSnapshotInfo {
+        content: Some("漢字仮名交じ".to_owned()),
+        attachments: vec![image_attachment(1)],
+        ..MessageSnapshotInfo::test()
+    }];
 
     assert_eq!(message_rendered_height(&message, 12, 16, 3), 9);
 }
@@ -417,28 +194,8 @@ fn forwarded_metadata_reserves_card_row() {
     let mut snapshot = forwarded_snapshot(1);
     snapshot.source_channel_id = Some(Id::new(2));
     snapshot.timestamp = Some("2026-04-30T12:34:56.000000+00:00".to_owned());
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: crate::discord::MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: vec![snapshot],
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.forwarded_snapshots = vec![snapshot];
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 9);
 }
@@ -448,56 +205,16 @@ fn forwarded_snapshot_embed_rows_increase_rendered_height() {
     let mut snapshot = forwarded_snapshot(1);
     snapshot.attachments.clear();
     snapshot.embeds = vec![youtube_embed()];
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: vec![snapshot],
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.forwarded_snapshots = vec![snapshot];
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 11);
 }
 
 #[test]
 fn non_default_message_kind_reserves_label_row() {
-    let mut message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("reply body".to_owned()),
-        mentions: Vec::new(),
-        attachments: vec![image_attachment(1)],
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("reply body");
+    message.attachments = vec![image_attachment(1)];
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 7);
 
@@ -508,59 +225,21 @@ fn non_default_message_kind_reserves_label_row() {
 
 #[test]
 fn reply_preview_reserves_connector_row_without_extra_type_label() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: MessageKind::new(19),
-        interaction: None,
-        reference: None,
-        reply: Some(ReplyInfo {
-            content: Some("looks good".to_owned()),
-            ..ReplyInfo::test("casey")
-        }),
-        poll: None,
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some("asdf".to_owned()),
-        mentions: Vec::new(),
-        attachments: vec![image_attachment(1)],
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("asdf");
+    message.message_kind = MessageKind::new(19);
+    message.reply = Some(ReplyInfo {
+        content: Some("looks good".to_owned()),
+        ..ReplyInfo::test("casey")
+    });
+    message.attachments = vec![image_attachment(1)];
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 8);
 }
 
 #[test]
 fn poll_message_reserves_question_and_answer_rows() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: Some(poll_info(false)),
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.poll = Some(poll_info(false));
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 9);
 }
@@ -625,28 +304,8 @@ fn thread_starter_message_reserves_system_card_rows() {
 
 #[test]
 fn multiselect_poll_message_uses_same_card_height() {
-    let message = MessageState {
-        id: Id::new(1),
-        guild_id: Some(Id::new(1)),
-        channel_id: Id::new(2),
-        author_id: Id::new(99),
-        author: "neo".to_owned(),
-        author_avatar_url: None,
-        author_is_bot: false,
-        message_kind: MessageKind::regular(),
-        interaction: None,
-        reference: None,
-        reply: None,
-        poll: Some(poll_info(true)),
-        pinned: false,
-        reactions: Vec::new(),
-        content: Some(String::new()),
-        mentions: Vec::new(),
-        attachments: Vec::new(),
-        embeds: Vec::new(),
-        forwarded_snapshots: Vec::new(),
-        ..MessageState::default()
-    };
+    let mut message = height_test_message("");
+    message.poll = Some(poll_info(true));
 
     assert_eq!(message_rendered_height(&message, 200, 16, 3), 9);
 }

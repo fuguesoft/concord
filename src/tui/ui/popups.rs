@@ -1,7 +1,8 @@
 use super::activity::{ActivityLeading, build_activity_render};
-use super::message_list::render_image_preview;
+use super::message::list::render_image_preview;
 use super::*;
 use crate::discord::ActivityKind;
+use crate::tui::format::format_byte_size;
 use ratatui::layout::Position;
 
 mod action_menu;
@@ -96,6 +97,36 @@ fn truncate_line_to_display_width(line: Line<'static>, max_width: usize) -> Line
     truncated.style = line.style;
     truncated.alignment = line.alignment;
     truncated
+}
+
+fn truncate_popup_lines(lines: Vec<Line<'static>>, width: usize) -> Vec<Line<'static>> {
+    lines
+        .into_iter()
+        .map(|line| truncate_line_to_display_width(line, width))
+        .collect()
+}
+
+fn selectable_popup_marker(selected: bool) -> Span<'static> {
+    let marker = if selected { "› " } else { "  " };
+    Span::styled(marker, Style::default().fg(ACCENT))
+}
+
+fn selectable_popup_shortcut_span(shortcut: impl Into<String>) -> Span<'static> {
+    Span::styled(shortcut.into(), Style::default().fg(DIM))
+}
+
+fn selectable_popup_label_style(selected: bool, enabled: bool) -> Style {
+    let mut style = if enabled {
+        Style::default()
+    } else {
+        Style::default().fg(DIM)
+    };
+    if selected {
+        style = style
+            .bg(Color::Rgb(40, 45, 90))
+            .add_modifier(Modifier::BOLD);
+    }
+    style
 }
 
 fn shortcut_prefix(shortcut: Option<char>) -> String {

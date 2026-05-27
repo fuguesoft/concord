@@ -322,10 +322,7 @@ fn leader_shortcut_prefix_line(prefix: &str, label: &str, enabled: bool) -> Line
     ])
 }
 fn truncate_leader_lines(lines: Vec<Line<'static>>, width: usize) -> Vec<Line<'static>> {
-    lines
-        .into_iter()
-        .map(|line| truncate_line_to_display_width(line, width.max(1)))
-        .collect()
+    truncate_popup_lines(lines, width.max(1))
 }
 
 pub(in crate::tui::ui) fn render_message_action_menu(
@@ -389,7 +386,7 @@ fn message_action_menu_lines_with_key_bindings(
         .iter()
         .enumerate()
         .map(|(index, action)| {
-            let marker = if index == selected { "› " } else { "  " };
+            let selected = index == selected;
             let shortcut = format!("{:<prefix_width$}", prefixes[index]);
             let label = if action.enabled {
                 key_bindings.message_action_label(action)
@@ -399,19 +396,10 @@ fn message_action_menu_lines_with_key_bindings(
                     key_bindings.message_action_label(action)
                 )
             };
-            let mut style = if action.enabled {
-                Style::default()
-            } else {
-                Style::default().fg(DIM)
-            };
-            if index == selected {
-                style = style
-                    .bg(Color::Rgb(40, 45, 90))
-                    .add_modifier(Modifier::BOLD);
-            }
+            let style = selectable_popup_label_style(selected, action.enabled);
             Line::from(vec![
-                Span::styled(marker, Style::default().fg(ACCENT)),
-                Span::styled(shortcut, Style::default().fg(DIM)),
+                selectable_popup_marker(selected),
+                selectable_popup_shortcut_span(shortcut),
                 Span::styled(label, style),
             ])
         })
@@ -426,8 +414,5 @@ fn shortcut_label_prefix(label: &str) -> String {
 }
 
 fn truncate_action_menu_lines(lines: Vec<Line<'static>>, width: usize) -> Vec<Line<'static>> {
-    lines
-        .into_iter()
-        .map(|line| truncate_line_to_display_width(line, width.max(1)))
-        .collect()
+    truncate_popup_lines(lines, width.max(1))
 }

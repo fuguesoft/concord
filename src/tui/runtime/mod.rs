@@ -17,17 +17,23 @@ use crate::{
 
 use super::{
     clipboard::{ClipboardError, ClipboardPasteData, ClipboardService},
-    commands as command_helpers, effects as effect_helpers, events, input,
+    commands as command_helpers, input,
     media::{
         AvatarImageCache, EmojiImageCache, ImagePreviewCache, visible_avatar_targets,
         visible_emoji_image_targets, visible_image_preview_targets,
     },
-    redraw::{
-        image_surfaces_visible, should_redraw_after_visible_signature_change,
-        visible_dashboard_signature,
-    },
     state::DashboardState,
     ui,
+};
+
+pub(super) mod effects;
+pub(super) mod events;
+pub(super) mod redraw;
+
+use effects as effect_helpers;
+use redraw::{
+    image_surfaces_visible, should_redraw_after_visible_signature_change,
+    visible_dashboard_signature,
 };
 
 type ClipboardPasteResult = std::result::Result<

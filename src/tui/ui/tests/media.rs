@@ -72,7 +72,7 @@ fn message_viewport_lines_put_reactions_below_image_preview_rows() {
         &messages,
         None,
         &DashboardState::new(),
-        super::super::message_viewport_layout(200, 80, 80, 16, 3),
+        super::default_message_viewport_layout(),
         &[],
     );
 
@@ -106,7 +106,7 @@ fn selected_author_group_keeps_avatar_body_inside_border() {
         &messages,
         Some(0),
         &DashboardState::new(),
-        super::super::message_viewport_layout(20, 80, 80, 16, 3),
+        super::narrow_message_viewport_layout(20),
         &[],
     );
     let sent_time = format_message_sent_time(Id::new(1));

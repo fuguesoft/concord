@@ -128,37 +128,14 @@ fn message_delete_confirmation_lines_with_key_bindings(
     width: usize,
     key_bindings: &crate::tui::keybindings::KeyBindings,
 ) -> Vec<Line<'static>> {
-    let width = width.max(1);
-    let excerpt = content
-        .map(str::trim)
-        .filter(|content| !content.is_empty())
-        .map(|content| content.split_whitespace().collect::<Vec<_>>().join(" "))
-        .unwrap_or_else(|| "[no text content]".to_owned());
-    let excerpt = truncate_display_width(&excerpt, width.saturating_sub(2));
-    vec![
-        Line::from(Span::raw("Delete this message?")),
-        Line::from(Span::styled(
-            format!("From: {author}"),
-            Style::default().fg(DIM),
-        )),
-        Line::from(Span::styled(
-            format!("\"{excerpt}\""),
-            Style::default().fg(Color::Red),
-        )),
-        Line::from(Span::raw(String::new())),
-        Line::from(vec![
-            Span::styled(
-                key_bindings.message_confirmation_confirm_label(),
-                Style::default().fg(ACCENT).bold(),
-            ),
-            Span::raw(" delete · "),
-            Span::styled(
-                key_bindings.message_confirmation_cancel_label(),
-                Style::default().fg(ACCENT).bold(),
-            ),
-            Span::raw(" cancel"),
-        ]),
-    ]
+    confirmation_lines(
+        "Delete this message?".to_owned(),
+        author,
+        content,
+        width,
+        "delete".to_owned(),
+        key_bindings,
+    )
 }
 
 #[cfg(test)]

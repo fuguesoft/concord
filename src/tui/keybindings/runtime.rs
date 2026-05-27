@@ -126,50 +126,46 @@ impl KeyBindings {
             UiAction::ResizePaneRight => Some(DashboardAction::ResizePaneRight),
             UiAction::Quit => Some(DashboardAction::Quit),
             UiAction::CopyMessage if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::CopyContent),
+                DashboardAction::MessageShortcut(MessageActionKind::CopyContent),
             ),
             UiAction::ReactMessage if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::OpenReactionPicker),
+                DashboardAction::MessageShortcut(MessageActionKind::OpenReactionPicker),
             ),
-            UiAction::ReplyMessage if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::Reply),
-            ),
+            UiAction::ReplyMessage if focus == FocusPane::Messages => {
+                Some(DashboardAction::MessageShortcut(MessageActionKind::Reply))
+            }
             UiAction::DeleteMessage if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::OpenDeleteConfirmation),
+                DashboardAction::MessageShortcut(MessageActionKind::OpenDeleteConfirmation),
             ),
-            UiAction::EditMessage if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::Edit),
-            ),
-            UiAction::OpenMessageUrl if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::OpenUrl),
-            ),
+            UiAction::EditMessage if focus == FocusPane::Messages => {
+                Some(DashboardAction::MessageShortcut(MessageActionKind::Edit))
+            }
+            UiAction::OpenMessageUrl if focus == FocusPane::Messages => {
+                Some(DashboardAction::MessageShortcut(MessageActionKind::OpenUrl))
+            }
             UiAction::ViewMessageAttachment if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::ViewAttachment),
+                DashboardAction::MessageShortcut(MessageActionKind::ViewAttachment),
             ),
             UiAction::ShowMessageProfile if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::ShowProfile),
+                DashboardAction::MessageShortcut(MessageActionKind::ShowProfile),
             ),
             UiAction::PinMessage if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::OpenPinConfirmation),
+                DashboardAction::MessageShortcut(MessageActionKind::OpenPinConfirmation),
             ),
             UiAction::OpenThread if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::OpenThread),
+                DashboardAction::MessageShortcut(MessageActionKind::OpenThread),
             ),
             UiAction::ShowReactionUsers if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::ShowReactionUsers),
+                DashboardAction::MessageShortcut(MessageActionKind::ShowReactionUsers),
             ),
             UiAction::OpenPollVotePicker if focus == FocusPane::Messages => Some(
-                DashboardAction::MessageShortcut(MessageShortcutAction::OpenPollVotePicker),
+                DashboardAction::MessageShortcut(MessageActionKind::OpenPollVotePicker),
             ),
             _ => None,
         }
     }
 
-    pub(in crate::tui) fn dashboard_action(
-        &self,
-        key: KeyEvent,
-        _focus: FocusPane,
-    ) -> Option<DashboardAction> {
+    pub(in crate::tui) fn dashboard_action(&self, key: KeyEvent) -> Option<DashboardAction> {
         if let Some(action) = self.selection_action(key, SelectionKeySet::Navigation) {
             return Some(DashboardAction::Select(action));
         }

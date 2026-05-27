@@ -3,7 +3,7 @@ use ratatui::layout::Rect;
 
 use crate::{Result, config, discord::AppEvent};
 
-use super::{input, state::DashboardState};
+use super::super::{input, state::DashboardState};
 use crate::discord::AppCommand;
 
 #[derive(Default)]

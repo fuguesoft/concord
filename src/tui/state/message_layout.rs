@@ -3,7 +3,13 @@ use std::time::Duration;
 use crate::discord::MessageState;
 
 use super::{MessageRowContentMetrics, MessageRowContentMetricsCacheKey, *};
-use crate::tui::{media, message_format, message_rows::MessageRowMetrics, message_time};
+use crate::tui::{
+    media,
+    message::{
+        format as message_format, layout::standalone_message_rendered_height,
+        rows::MessageRowMetrics, time as message_time,
+    },
+};
 
 const AUTHOR_GROUP_MAX_GAP: Duration = Duration::from_secs(5 * 60);
 
@@ -107,7 +113,7 @@ impl DashboardState {
 
     pub(crate) fn message_bottom_gap_after(&self, index: usize) -> usize {
         usize::from(self.message_has_bottom_gap_after(index))
-            * crate::tui::message_rows::MESSAGE_ROW_GAP
+            * crate::tui::message::rows::MESSAGE_ROW_GAP
     }
 
     fn selected_message_extra_top_line_at(&self, index: usize) -> usize {
@@ -319,12 +325,13 @@ impl DashboardState {
             message_format::format_message_content_sections(message, self, content_width);
         let previews = message.inline_previews();
         let album = media::image_preview_album_layout(&previews, preview_width, max_preview_height);
-        1 + body_lines.len()
-            + reaction_lines.len()
-            + album
+        standalone_message_rendered_height(
+            body_lines.len(),
+            reaction_lines.len(),
+            album
                 .height
-                .saturating_add(usize::from(album.overflow_count > 0))
-            + crate::tui::message_rows::MESSAGE_ROW_GAP
+                .saturating_add(usize::from(album.overflow_count > 0)),
+        )
     }
 
     /// Same as `message_rendered_height` but also accounts for an optional

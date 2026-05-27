@@ -165,7 +165,7 @@ fn message_viewport_author_uses_resolved_role_color() {
         &messages,
         None,
         &state,
-        super::super::message_viewport_layout(40, 80, 80, 16, 3),
+        super::narrow_message_viewport_layout(40),
         &[],
     );
 
@@ -280,7 +280,7 @@ fn history_message_author_uses_channel_guild_for_role_color() {
         &messages,
         None,
         &state,
-        super::super::message_viewport_layout(40, 80, 80, 16, 3),
+        super::narrow_message_viewport_layout(40),
         &[],
     );
 
@@ -1424,7 +1424,7 @@ fn message_viewport_lines_reserve_rows_for_multiple_attachment_summaries() {
         &messages,
         None,
         &DashboardState::new(),
-        super::super::message_viewport_layout(200, 80, 80, 16, 3),
+        super::default_message_viewport_layout(),
         &[],
     );
 
@@ -1442,7 +1442,7 @@ fn message_viewport_lines_group_consecutive_messages_by_author() {
         &messages,
         None,
         &state,
-        super::super::message_viewport_layout(200, 80, 80, 16, 3),
+        super::default_message_viewport_layout(),
         &[],
     );
     let texts = line_texts_from_ratatui(&lines);
@@ -1468,7 +1468,7 @@ fn message_viewport_lines_start_new_author_group_after_time_gap() {
         &messages,
         None,
         &state,
-        super::super::message_viewport_layout(200, 80, 80, 16, 3),
+        super::default_message_viewport_layout(),
         &[],
     );
     let texts = line_texts_from_ratatui(&lines);
@@ -1495,7 +1495,7 @@ fn message_viewport_lines_keep_reactions_below_reacted_grouped_message() {
         &messages,
         None,
         &state,
-        super::super::message_viewport_layout(200, 80, 80, 16, 3),
+        super::default_message_viewport_layout(),
         &[],
     );
     let texts = line_texts_from_ratatui(&lines);
@@ -1520,7 +1520,7 @@ fn message_viewport_lines_reserve_bounded_rows_for_image_albums() {
             &messages,
             None,
             &DashboardState::new(),
-            super::super::message_viewport_layout(200, 80, 80, 16, 3),
+            super::default_message_viewport_layout(),
             &[],
         );
 
@@ -1723,7 +1723,7 @@ fn message_viewport_lines_keep_rows_from_tall_following_message() {
         &messages,
         Some(0),
         &DashboardState::new(),
-        super::super::message_viewport_layout(5, 80, 80, 16, 3),
+        super::narrow_message_viewport_layout(5),
         &[],
     )
     .into_iter()
@@ -1760,7 +1760,7 @@ fn message_viewport_lines_render_overflow_marker_as_text_fallback() {
         &messages,
         None,
         &DashboardState::new(),
-        super::super::message_viewport_layout(200, 80, 80, 16, 3),
+        super::default_message_viewport_layout(),
         &[],
     );
 

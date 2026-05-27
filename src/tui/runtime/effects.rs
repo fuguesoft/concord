@@ -16,7 +16,7 @@ use crate::{
     logging,
 };
 
-use super::{
+use super::super::{
     media::{
         AvatarImageCache, EmojiImageCache, ImagePreviewCache, ImagePreviewDecodeResult,
         spawn_image_preview_decode,
@@ -27,17 +27,17 @@ use super::{
 pub(super) const MAX_DRAINED_EFFECT_EVENTS: usize = 1024;
 static NOTIFICATION_FAILURE_LOGGED: AtomicBool = AtomicBool::new(false);
 
-pub(super) struct EffectContext<'a> {
-    pub(super) state: &'a mut DashboardState,
-    pub(super) client: &'a DiscordClient,
-    pub(super) image_previews: &'a mut ImagePreviewCache,
-    pub(super) avatar_images: &'a mut AvatarImageCache,
-    pub(super) emoji_images: &'a mut EmojiImageCache,
-    pub(super) preview_decode_tx: &'a mpsc::UnboundedSender<ImagePreviewDecodeResult>,
+pub(in crate::tui) struct EffectContext<'a> {
+    pub(in crate::tui) state: &'a mut DashboardState,
+    pub(in crate::tui) client: &'a DiscordClient,
+    pub(in crate::tui) image_previews: &'a mut ImagePreviewCache,
+    pub(in crate::tui) avatar_images: &'a mut AvatarImageCache,
+    pub(in crate::tui) emoji_images: &'a mut EmojiImageCache,
+    pub(in crate::tui) preview_decode_tx: &'a mpsc::UnboundedSender<ImagePreviewDecodeResult>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct EffectProcessingOutcome {
+pub(in crate::tui) struct EffectProcessingOutcome {
     pub(super) processed_event: bool,
     pub(super) force_redraw: bool,
 }
@@ -56,7 +56,7 @@ impl EffectProcessingOutcome {
     }
 }
 
-pub(super) fn effect_forces_redraw(event: &AppEvent) -> bool {
+pub(in crate::tui) fn effect_forces_redraw(event: &AppEvent) -> bool {
     // Attachment preview events are the shared media-completion path for
     // inline previews, avatars, emoji images, and profile-popup avatars. They
     // must redraw even when the visible dashboard signature is unchanged.
@@ -319,7 +319,7 @@ fn command_success(command: &mut Command, label: &str) -> std::result::Result<()
 }
 
 #[cfg(any(target_os = "macos", test))]
-pub(super) fn applescript_string(value: &str) -> String {
+pub(in crate::tui) fn applescript_string(value: &str) -> String {
     let mut escaped = String::from("\"");
     for ch in value.chars() {
         match ch {
@@ -339,7 +339,7 @@ fn ring_terminal_bell() {
     let _ = output.flush();
 }
 
-pub(super) fn process_sequenced_effect(
+pub(in crate::tui) fn process_sequenced_effect(
     event: SequencedAppEvent,
     current_snapshot_revision: u64,
     deferred_effects: &mut VecDeque<SequencedAppEvent>,
@@ -352,7 +352,7 @@ pub(super) fn process_sequenced_effect(
     process_effect_event(event.event, ctx)
 }
 
-pub(super) fn process_deferred_effects(
+pub(in crate::tui) fn process_deferred_effects(
     current_snapshot_revision: u64,
     deferred_effects: &mut VecDeque<SequencedAppEvent>,
     ctx: &mut EffectContext<'_>,

@@ -52,18 +52,13 @@ fn poll_vote_picker_lines_with_key_bindings(
         .iter()
         .enumerate()
         .map(|(index, answer)| {
-            let marker = if index == selected { "› " } else { "  " };
+            let selected = index == selected;
             let shortcut = shortcut_prefix(key_bindings.indexed_shortcut(index));
             let checkbox = if answer.selected { "[x]" } else { "[ ]" };
-            let mut style = Style::default();
-            if index == selected {
-                style = style
-                    .bg(Color::Rgb(40, 45, 90))
-                    .add_modifier(Modifier::BOLD);
-            }
+            let style = selectable_popup_label_style(selected, true);
             Line::from(vec![
-                Span::styled(marker, Style::default().fg(ACCENT)),
-                Span::styled(shortcut, Style::default().fg(DIM)),
+                selectable_popup_marker(selected),
+                selectable_popup_shortcut_span(shortcut),
                 Span::styled(format!("{checkbox} {}", answer.label), style),
             ])
         })

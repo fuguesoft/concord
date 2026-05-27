@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::super::{
-    message_format::format_message_content_lines,
+    message::format::format_message_content_lines,
     selection,
     state::{ActiveModalPopupKind, DashboardState, MAX_MENTION_PICKER_VISIBLE},
     ui::ImagePreviewLayout,

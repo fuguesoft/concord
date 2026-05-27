@@ -171,7 +171,7 @@ fn render_password_input(frame: &mut Frame, state: &LoginState) {
     ];
 
     if state.password.in_progress && !state.password.status.is_empty() {
-        lines.push(status_line(&state.password.status));
+        lines.push(notice_line(&state.password.status));
     } else if let Some(error) = &state.error {
         lines.push(error_line(error));
     } else {
@@ -212,7 +212,7 @@ fn render_mfa_select(frame: &mut Frame, state: &LoginState) {
     lines.push(Line::from(""));
 
     if state.password.in_progress && !state.password.status.is_empty() {
-        lines.push(status_line(&state.password.status));
+        lines.push(notice_line(&state.password.status));
     } else if let Some(error) = &state.error {
         lines.push(error_line(error));
     } else if !state.password.status.is_empty() {
@@ -375,10 +375,6 @@ fn notice_line(value: impl AsRef<str>) -> Line<'static> {
         value.as_ref().to_owned(),
         Style::default().fg(Color::Yellow),
     ))
-}
-
-fn status_line(value: impl AsRef<str>) -> Line<'static> {
-    notice_line(value)
 }
 
 fn choice_line(key: &'static str, text: &'static str) -> Line<'static> {

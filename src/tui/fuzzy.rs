@@ -76,7 +76,7 @@ pub(super) fn fuzzy_text_score(value: &str, query: &str) -> Option<FuzzyScore> {
         return Some(FuzzyScore(FuzzyScore::EXACT));
     }
 
-    if starts_with_chars(&value_lower, &query_lower) {
+    if value_lower.starts_with(&query_lower) {
         return Some(FuzzyScore(FuzzyScore::PREFIX - value_chars.len() as i32));
     }
 
@@ -88,7 +88,7 @@ pub(super) fn fuzzy_text_score(value: &str, query: &str) -> Option<FuzzyScore> {
     let mut dp = vec![vec![i32::MIN; value_chars.len()]; query_chars.len()];
 
     for v in 0..value_chars.len() {
-        if !chars_equal(value_lower[v], query_lower[0]) {
+        if value_lower[v] != query_lower[0] {
             continue;
         }
 
@@ -97,7 +97,7 @@ pub(super) fn fuzzy_text_score(value: &str, query: &str) -> Option<FuzzyScore> {
 
     for q in 1..query_chars.len() {
         for v in q..value_chars.len() {
-            if !chars_equal(value_lower[v], query_lower[q]) {
+            if value_lower[v] != query_lower[q] {
                 continue;
             }
 
@@ -178,14 +178,6 @@ fn character_score(
     }
 
     score
-}
-
-fn chars_equal(a: char, b: char) -> bool {
-    a == b
-}
-
-fn starts_with_chars(haystack: &[char], needle: &[char]) -> bool {
-    haystack.starts_with(needle)
 }
 
 fn is_word_boundary(chars: &[char], index: usize) -> bool {

@@ -1,4 +1,4 @@
-use super::message_list::message_author_style;
+use super::message::list::message_author_style;
 use super::*;
 
 #[cfg(test)]
@@ -56,11 +56,11 @@ fn forum_post_card_lines(
     let marker = if selected { "› " } else { "  " };
     let card_width = width.saturating_sub(marker.width()).max(4);
     let inner_width = card_width.saturating_sub(4).max(1);
-    let border_style = forum_post_border_style(selected);
+    let border_style = forum_post_accent_style(selected);
 
     [
         Line::from(vec![
-            Span::styled(marker, forum_post_marker_style(selected)),
+            Span::styled(marker, forum_post_accent_style(selected)),
             Span::styled(
                 format!("╭{}╮", "─".repeat(card_width.saturating_sub(2))),
                 border_style,
@@ -437,7 +437,7 @@ fn forum_post_inner_line(
         .map(|span| span.content.width())
         .sum::<usize>();
     let padding = inner_width.saturating_sub(content_width);
-    let border_style = forum_post_border_style(selected);
+    let border_style = forum_post_accent_style(selected);
     let fill_style = Style::default();
     let mut spans = vec![
         Span::raw(marker.to_owned()),
@@ -449,17 +449,7 @@ fn forum_post_inner_line(
     Line::from(spans)
 }
 
-fn forum_post_border_style(selected: bool) -> Style {
-    if selected {
-        Style::default()
-            .fg(SELECTED_FORUM_POST_BORDER)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(ACCENT)
-    }
-}
-
-fn forum_post_marker_style(selected: bool) -> Style {
+fn forum_post_accent_style(selected: bool) -> Style {
     if selected {
         Style::default()
             .fg(SELECTED_FORUM_POST_BORDER)

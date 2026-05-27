@@ -16,113 +16,55 @@ pub(super) fn handle_priority_popup_key(
         return Some(None);
     }
 
-    let target = PriorityPopupKeyTarget::active(state)?;
-    Some(target.handle(state, key))
+    match state.active_modal_popup_kind()? {
+        ActiveModalPopupKind::KeymapHelp => Some(handle_keymap_popup_key(state, key)),
+        ActiveModalPopupKind::DebugLog => Some(handle_debug_log_popup_key(state, key)),
+        ActiveModalPopupKind::QuitConfirmation => Some(handle_quit_confirmation_key(state, key)),
+        ActiveModalPopupKind::Options => Some(handle_options_popup_key(state, key)),
+        ActiveModalPopupKind::ReactionUsers => Some(handle_reaction_users_popup_key(state, key)),
+        ActiveModalPopupKind::MessageDeleteConfirmation => {
+            Some(handle_message_delete_confirmation_key(state, key))
+        }
+        ActiveModalPopupKind::MessagePinConfirmation => {
+            Some(handle_message_pin_confirmation_key(state, key))
+        }
+        ActiveModalPopupKind::GuildLeaveConfirmation => {
+            Some(handle_guild_leave_confirmation_key(state, key))
+        }
+        ActiveModalPopupKind::PollVotePicker => Some(handle_poll_vote_picker_key(state, key)),
+        ActiveModalPopupKind::EmojiReactionPicker => {
+            Some(handle_emoji_reaction_picker_key(state, key))
+        }
+        ActiveModalPopupKind::MessageActionMenu
+        | ActiveModalPopupKind::MessageUrlPicker
+        | ActiveModalPopupKind::AttachmentViewer
+        | ActiveModalPopupKind::Leader
+        | ActiveModalPopupKind::UserProfile
+        | ActiveModalPopupKind::ChannelSwitcher => None,
+    }
 }
 
 pub(super) fn handle_deferred_popup_key(
     state: &mut DashboardState,
     key: KeyEvent,
 ) -> Option<Option<AppCommand>> {
-    let target = DeferredPopupKeyTarget::active(state)?;
-    Some(target.handle(state, key))
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PriorityPopupKeyTarget {
-    Keymap,
-    DebugLog,
-    QuitConfirmation,
-    Options,
-    ReactionUsers,
-    MessageDeleteConfirmation,
-    MessagePinConfirmation,
-    GuildLeaveConfirmation,
-    PollVotePicker,
-    EmojiReactionPicker,
-}
-
-impl PriorityPopupKeyTarget {
-    fn active(state: &DashboardState) -> Option<Self> {
-        match state.active_modal_popup_kind()? {
-            ActiveModalPopupKind::KeymapHelp => Some(Self::Keymap),
-            ActiveModalPopupKind::DebugLog => Some(Self::DebugLog),
-            ActiveModalPopupKind::QuitConfirmation => Some(Self::QuitConfirmation),
-            ActiveModalPopupKind::Options => Some(Self::Options),
-            ActiveModalPopupKind::ReactionUsers => Some(Self::ReactionUsers),
-            ActiveModalPopupKind::MessageDeleteConfirmation => {
-                Some(Self::MessageDeleteConfirmation)
-            }
-            ActiveModalPopupKind::MessagePinConfirmation => Some(Self::MessagePinConfirmation),
-            ActiveModalPopupKind::GuildLeaveConfirmation => Some(Self::GuildLeaveConfirmation),
-            ActiveModalPopupKind::PollVotePicker => Some(Self::PollVotePicker),
-            ActiveModalPopupKind::EmojiReactionPicker => Some(Self::EmojiReactionPicker),
-            ActiveModalPopupKind::MessageActionMenu
-            | ActiveModalPopupKind::MessageUrlPicker
-            | ActiveModalPopupKind::AttachmentViewer
-            | ActiveModalPopupKind::Leader
-            | ActiveModalPopupKind::UserProfile
-            | ActiveModalPopupKind::ChannelSwitcher => None,
-        }
-    }
-
-    fn handle(self, state: &mut DashboardState, key: KeyEvent) -> Option<AppCommand> {
-        match self {
-            Self::Keymap => handle_keymap_popup_key(state, key),
-            Self::DebugLog => handle_debug_log_popup_key(state, key),
-            Self::QuitConfirmation => handle_quit_confirmation_key(state, key),
-            Self::Options => handle_options_popup_key(state, key),
-            Self::ReactionUsers => handle_reaction_users_popup_key(state, key),
-            Self::MessageDeleteConfirmation => handle_message_delete_confirmation_key(state, key),
-            Self::MessagePinConfirmation => handle_message_pin_confirmation_key(state, key),
-            Self::GuildLeaveConfirmation => handle_guild_leave_confirmation_key(state, key),
-            Self::PollVotePicker => handle_poll_vote_picker_key(state, key),
-            Self::EmojiReactionPicker => handle_emoji_reaction_picker_key(state, key),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DeferredPopupKeyTarget {
-    ChannelSwitcher,
-    Leader,
-    MessageUrlPicker,
-    MessageActionMenu,
-    AttachmentViewer,
-    UserProfile,
-}
-
-impl DeferredPopupKeyTarget {
-    fn active(state: &DashboardState) -> Option<Self> {
-        match state.active_modal_popup_kind()? {
-            ActiveModalPopupKind::ChannelSwitcher => Some(Self::ChannelSwitcher),
-            ActiveModalPopupKind::Leader => Some(Self::Leader),
-            ActiveModalPopupKind::MessageUrlPicker => Some(Self::MessageUrlPicker),
-            ActiveModalPopupKind::MessageActionMenu => Some(Self::MessageActionMenu),
-            ActiveModalPopupKind::AttachmentViewer => Some(Self::AttachmentViewer),
-            ActiveModalPopupKind::UserProfile => Some(Self::UserProfile),
-            ActiveModalPopupKind::MessageDeleteConfirmation
-            | ActiveModalPopupKind::MessagePinConfirmation
-            | ActiveModalPopupKind::QuitConfirmation
-            | ActiveModalPopupKind::GuildLeaveConfirmation
-            | ActiveModalPopupKind::Options
-            | ActiveModalPopupKind::EmojiReactionPicker
-            | ActiveModalPopupKind::PollVotePicker
-            | ActiveModalPopupKind::ReactionUsers
-            | ActiveModalPopupKind::DebugLog
-            | ActiveModalPopupKind::KeymapHelp => None,
-        }
-    }
-
-    fn handle(self, state: &mut DashboardState, key: KeyEvent) -> Option<AppCommand> {
-        match self {
-            Self::ChannelSwitcher => handle_channel_switcher_key(state, key),
-            Self::Leader => super::leader::handle_leader_key(state, key),
-            Self::MessageUrlPicker => handle_message_url_picker_key(state, key),
-            Self::MessageActionMenu => handle_message_action_menu_key(state, key),
-            Self::AttachmentViewer => handle_attachment_viewer_key(state, key),
-            Self::UserProfile => handle_user_profile_popup_key(state, key),
-        }
+    match state.active_modal_popup_kind()? {
+        ActiveModalPopupKind::ChannelSwitcher => Some(handle_channel_switcher_key(state, key)),
+        ActiveModalPopupKind::Leader => Some(super::leader::handle_leader_key(state, key)),
+        ActiveModalPopupKind::MessageUrlPicker => Some(handle_message_url_picker_key(state, key)),
+        ActiveModalPopupKind::MessageActionMenu => Some(handle_message_action_menu_key(state, key)),
+        ActiveModalPopupKind::AttachmentViewer => Some(handle_attachment_viewer_key(state, key)),
+        ActiveModalPopupKind::UserProfile => Some(handle_user_profile_popup_key(state, key)),
+        ActiveModalPopupKind::MessageDeleteConfirmation
+        | ActiveModalPopupKind::MessagePinConfirmation
+        | ActiveModalPopupKind::QuitConfirmation
+        | ActiveModalPopupKind::GuildLeaveConfirmation
+        | ActiveModalPopupKind::Options
+        | ActiveModalPopupKind::EmojiReactionPicker
+        | ActiveModalPopupKind::PollVotePicker
+        | ActiveModalPopupKind::ReactionUsers
+        | ActiveModalPopupKind::DebugLog
+        | ActiveModalPopupKind::KeymapHelp => None,
     }
 }
 
@@ -214,55 +156,63 @@ pub(super) fn handle_message_delete_confirmation_key(
     state: &mut DashboardState,
     key: KeyEvent,
 ) -> Option<AppCommand> {
-    match state.key_bindings().message_confirmation_action(key) {
-        Some(MessageConfirmationAction::Confirm) => state.confirm_message_delete(),
-        Some(MessageConfirmationAction::Cancel) => {
-            state.close_message_delete_confirmation();
-            None
-        }
-        None => None,
-    }
+    handle_confirmation_key(
+        state,
+        key,
+        DashboardState::confirm_message_delete,
+        DashboardState::close_message_delete_confirmation,
+    )
 }
 
 pub(super) fn handle_quit_confirmation_key(
     state: &mut DashboardState,
     key: KeyEvent,
 ) -> Option<AppCommand> {
-    match state.key_bindings().message_confirmation_action(key) {
-        Some(MessageConfirmationAction::Confirm) => {
+    handle_confirmation_key(
+        state,
+        key,
+        |state| {
             state.confirm_quit();
             None
-        }
-        Some(MessageConfirmationAction::Cancel) => {
-            state.close_quit_confirmation();
-            None
-        }
-        None => None,
-    }
+        },
+        DashboardState::close_quit_confirmation,
+    )
 }
 
 pub(super) fn handle_message_pin_confirmation_key(
     state: &mut DashboardState,
     key: KeyEvent,
 ) -> Option<AppCommand> {
-    match state.key_bindings().message_confirmation_action(key) {
-        Some(MessageConfirmationAction::Confirm) => state.confirm_message_pin(),
-        Some(MessageConfirmationAction::Cancel) => {
-            state.close_message_pin_confirmation();
-            None
-        }
-        None => None,
-    }
+    handle_confirmation_key(
+        state,
+        key,
+        DashboardState::confirm_message_pin,
+        DashboardState::close_message_pin_confirmation,
+    )
 }
 
 pub(super) fn handle_guild_leave_confirmation_key(
     state: &mut DashboardState,
     key: KeyEvent,
 ) -> Option<AppCommand> {
+    handle_confirmation_key(
+        state,
+        key,
+        DashboardState::confirm_guild_leave,
+        DashboardState::close_guild_leave_confirmation,
+    )
+}
+
+fn handle_confirmation_key(
+    state: &mut DashboardState,
+    key: KeyEvent,
+    confirm: impl FnOnce(&mut DashboardState) -> Option<AppCommand>,
+    cancel: impl FnOnce(&mut DashboardState),
+) -> Option<AppCommand> {
     match state.key_bindings().message_confirmation_action(key) {
-        Some(MessageConfirmationAction::Confirm) => state.confirm_guild_leave(),
+        Some(MessageConfirmationAction::Confirm) => confirm(state),
         Some(MessageConfirmationAction::Cancel) => {
-            state.close_guild_leave_confirmation();
+            cancel(state);
             None
         }
         None => None,

@@ -5,7 +5,7 @@ use ratatui::{
 use unicode_width::UnicodeWidthStr;
 
 use super::super::{
-    message_format::wrap_text_lines,
+    message::format::wrap_text_lines,
     state::{AttachmentViewerZoom, DashboardState, FocusPane},
 };
 use super::types::{

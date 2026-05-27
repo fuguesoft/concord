@@ -1,10 +1,11 @@
-use super::forum;
-use super::panes::{
+use super::super::forum;
+use super::super::panes::{
     render_composer, render_composer_command_picker, render_composer_emoji_picker,
     render_composer_mention_picker,
 };
-use super::*;
-use crate::tui::message_time::{
+use super::super::*;
+use crate::tui::media;
+use crate::tui::message::time::{
     format_message_local_time, message_local_date, message_local_datetime,
 };
 
@@ -29,7 +30,7 @@ struct MessageItemLinesInput<'a> {
     line_offset: usize,
 }
 
-pub(super) fn render_messages(
+pub(in crate::tui::ui) fn render_messages(
     frame: &mut Frame,
     area: Rect,
     state: &DashboardState,
@@ -532,7 +533,7 @@ fn render_inline_message_body_emojis(
 }
 
 #[cfg(test)]
-pub(super) fn message_body_custom_emoji_rows(
+pub(in crate::tui::ui) fn message_body_custom_emoji_rows(
     messages: &[&MessageState],
     state: &DashboardState,
     content_width: usize,
@@ -585,7 +586,7 @@ pub(super) fn message_body_custom_emoji_rows(
     rows
 }
 
-pub(super) fn render_image_preview(
+pub(in crate::tui::ui) fn render_image_preview(
     frame: &mut Frame,
     area: Rect,
     image_preview: ImagePreviewState<'_>,
@@ -633,7 +634,7 @@ fn render_image_preview_overflow_marker(frame: &mut Frame, area: Rect, overflow_
     );
 }
 
-pub(super) fn message_viewport_lines(
+pub(in crate::tui::ui) fn message_viewport_lines(
     messages: &[&MessageState],
     selected: Option<usize>,
     state: &DashboardState,
@@ -725,7 +726,7 @@ pub(super) fn message_viewport_lines(
 }
 
 #[cfg(test)]
-pub(super) fn message_viewport_layout(
+pub(in crate::tui::ui) fn message_viewport_layout(
     content_width: usize,
     list_width: usize,
     selected_card_width: usize,
@@ -743,7 +744,7 @@ pub(super) fn message_viewport_layout(
 
 #[allow(clippy::too_many_arguments)]
 #[cfg(test)]
-pub(super) fn message_item_lines(
+pub(in crate::tui::ui) fn message_item_lines(
     author: String,
     author_style: Style,
     sent_time: String,
@@ -834,7 +835,7 @@ fn message_item_lines_with_previews(input: MessageItemLinesInput<'_>) -> Vec<Lin
     lines.into_iter().skip(line_offset).collect()
 }
 
-pub(super) fn message_author_style(role_color: Option<u32>) -> Style {
+pub(in crate::tui::ui) fn message_author_style(role_color: Option<u32>) -> Style {
     Style::default()
         .fg(discord_color(role_color, Color::White))
         .bold()
@@ -850,7 +851,7 @@ fn bot_badge_span() -> Span<'static> {
     )
 }
 
-pub(super) fn message_avatar_area(
+pub(in crate::tui::ui) fn message_avatar_area(
     list: Rect,
     row: isize,
     visible_height: u16,
@@ -1026,22 +1027,28 @@ fn selected_message_border_style() -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
-pub(super) fn selected_message_content_x_offset(selected: bool) -> u16 {
-    let _ = selected;
-    0
+const SELECTED_MESSAGE_CONTENT_X_OFFSET: u16 = 0;
+const SELECTED_AVATAR_X_OFFSET: u16 = MESSAGE_SELECTION_PREFIX_WIDTH;
+
+pub(in crate::tui::ui) fn selected_message_content_x_offset(_selected: bool) -> u16 {
+    SELECTED_MESSAGE_CONTENT_X_OFFSET
 }
 
 fn loaded_custom_emoji_urls(emoji_images: &[EmojiImage<'_>]) -> Vec<String> {
     emoji_images.iter().map(|image| image.url.clone()).collect()
 }
 
-pub(super) fn selected_avatar_x_offset(selected_body_top: Option<isize>, avatar_row: isize) -> u16 {
-    let _ = selected_body_top;
-    let _ = avatar_row;
-    MESSAGE_SELECTION_PREFIX_WIDTH
+pub(in crate::tui::ui) fn selected_avatar_x_offset(
+    _selected_body_top: Option<isize>,
+    _avatar_row: isize,
+) -> u16 {
+    SELECTED_AVATAR_X_OFFSET
 }
 
-pub(super) fn selected_message_card_width(list_width: usize, scrollbar_visible: bool) -> usize {
+pub(in crate::tui::ui) fn selected_message_card_width(
+    list_width: usize,
+    scrollbar_visible: bool,
+) -> usize {
     list_width
         .saturating_sub(usize::from(scrollbar_visible))
         .max(4)
@@ -1079,17 +1086,20 @@ fn message_body_top_row(
     None
 }
 
-pub(super) fn format_message_sent_time(message_id: Id<MessageMarker>) -> String {
+pub(in crate::tui::ui) fn format_message_sent_time(message_id: Id<MessageMarker>) -> String {
     format_message_local_time(message_id)
 }
 
-pub(super) fn date_separator_line(message_id: Id<MessageMarker>, width: usize) -> Line<'static> {
+pub(in crate::tui::ui) fn date_separator_line(
+    message_id: Id<MessageMarker>,
+    width: usize,
+) -> Line<'static> {
     let date = message_local_date(message_id);
     let label = format!(" {} ", date.format("%Y-%m-%d"));
     separator_line(&label, width, Style::default().fg(DIM))
 }
 
-pub(super) fn unread_divider_line(width: usize) -> Line<'static> {
+pub(in crate::tui::ui) fn unread_divider_line(width: usize) -> Line<'static> {
     // Discord-style red bar with a small "New" tag pinned to the right
     // edge so the unread boundary is unambiguous in dark and light themes.
     const UNREAD: Color = Color::Rgb(237, 66, 69);
@@ -1110,7 +1120,7 @@ pub(super) fn unread_divider_line(width: usize) -> Line<'static> {
     ])
 }
 
-pub(super) fn new_messages_notice_line(count: usize, width: usize) -> Line<'static> {
+pub(in crate::tui::ui) fn new_messages_notice_line(count: usize, width: usize) -> Line<'static> {
     let label = new_messages_notice_label(count);
     let text = if label.as_str().width() > width {
         truncate_display_width(&label, width)
@@ -1174,11 +1184,7 @@ fn inline_preview_spacers_for_message(
     max_preview_height: u16,
 ) -> Vec<InlinePreviewSpacer> {
     let previews = message.inline_previews();
-    let album = super::super::media::image_preview_album_layout(
-        &previews,
-        preview_width,
-        max_preview_height,
-    );
+    let album = media::image_preview_album_layout(&previews, preview_width, max_preview_height);
     (album.height > 0)
         .then(|| {
             let accent_color = (previews.len() == 1)
@@ -1222,7 +1228,7 @@ fn inline_preview_rows_before_message(
         .sum()
 }
 
-pub(super) fn inline_image_preview_row(
+pub(in crate::tui::ui) fn inline_image_preview_row(
     messages: &[&MessageState],
     state: &DashboardState,
     message_index: usize,

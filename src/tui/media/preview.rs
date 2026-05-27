@@ -230,7 +230,7 @@ impl ImagePreviewCache {
             return Vec::new();
         }
 
-        let Some(font_size) = self.picker.as_ref().map(Picker::font_size) else {
+        let Some(_) = self.picker.as_ref() else {
             for key in keys {
                 let filename = self.filename_for_key(&key);
                 let last_used = self.next_tick();
@@ -246,14 +246,13 @@ impl ImagePreviewCache {
             return Vec::new();
         };
 
-        self.decode_jobs_for_loaded_keys(keys, bytes, font_size)
+        self.decode_jobs_for_loaded_keys(keys, bytes)
     }
 
     pub(super) fn decode_jobs_for_loaded_keys(
         &mut self,
         keys: Vec<ImagePreviewKey>,
         bytes: &[u8],
-        _font_size: (u16, u16),
     ) -> Vec<ImagePreviewDecodeJob> {
         let bytes: Arc<[u8]> = Arc::from(bytes.to_vec());
         let mut jobs = Vec::new();

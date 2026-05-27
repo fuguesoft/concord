@@ -60,6 +60,19 @@ pub fn truncate_display_width_from(value: &str, offset: usize, limit: usize) -> 
     truncate_display_width(&value[start..], limit)
 }
 
+pub(in crate::tui) fn format_byte_size(bytes: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = KIB * 1024;
+
+    if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
 pub fn sanitize_for_display_width(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for grapheme in value.graphemes(true) {

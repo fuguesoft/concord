@@ -12,17 +12,17 @@ use ratatui::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use super::{
+use super::time as message_time;
+use crate::discord::{
+    AttachmentInfo, EmbedInfo, MessageKind, MessageSnapshotInfo, MessageState, PollInfo,
+    ReactionEmoji, ReactionInfo, ReplyInfo,
+};
+use crate::tui::{
     format::{
         InlineEmojiSlot, RenderedText, TextHighlight, TextHighlightKind, detected_url_ranges,
         replace_custom_emoji_markup_in_rendered_with_images, truncate_display_width, truncate_text,
     },
-    message_time,
     state::{DashboardState, ThreadSummary, discord_color},
-};
-use crate::discord::{
-    AttachmentInfo, EmbedInfo, MessageKind, MessageSnapshotInfo, MessageState, PollInfo,
-    ReactionEmoji, ReactionInfo, ReplyInfo,
 };
 
 const ACCENT: Color = Color::Cyan;
@@ -35,15 +35,15 @@ const THREAD_CARD_INDENT: &str = "  ";
 const EDITED_MARKER: &str = " (edited)";
 const MARKDOWN_QUOTE_PREFIX: &str = "▎ ";
 const MARKDOWN_BULLET_PREFIX: &str = "• ";
-pub(super) const EMOJI_REACTION_IMAGE_WIDTH: u16 = 2;
+pub(in crate::tui) const EMOJI_REACTION_IMAGE_WIDTH: u16 = 2;
 
 #[derive(Clone)]
-pub(super) struct MessageContentLine {
-    pub(super) text: String,
-    pub(super) style: Style,
+pub(in crate::tui) struct MessageContentLine {
+    pub(in crate::tui) text: String,
+    pub(in crate::tui) style: Style,
     mention_highlights: Vec<TextHighlight>,
     styled_prefixes: Vec<StyledPrefix>,
-    pub(super) image_slots: Vec<MessageContentImageSlot>,
+    pub(in crate::tui) image_slots: Vec<MessageContentImageSlot>,
 }
 
 #[derive(Clone, Copy)]
@@ -58,16 +58,16 @@ struct StyledPrefix {
 /// lands and `byte_start..byte_start+byte_len` is the visible placeholder the
 /// renderer blanks once the image arrives.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct MessageContentImageSlot {
-    pub(super) col: u16,
-    pub(super) byte_start: usize,
-    pub(super) byte_len: usize,
-    pub(super) display_width: u16,
-    pub(super) url: String,
+pub(in crate::tui) struct MessageContentImageSlot {
+    pub(in crate::tui) col: u16,
+    pub(in crate::tui) byte_start: usize,
+    pub(in crate::tui) byte_len: usize,
+    pub(in crate::tui) display_width: u16,
+    pub(in crate::tui) url: String,
 }
 
 impl MessageContentLine {
-    pub(super) fn plain(text: String) -> Self {
+    pub(in crate::tui) fn plain(text: String) -> Self {
         Self {
             text,
             style: Style::default(),
@@ -130,7 +130,7 @@ impl MessageContentLine {
         self.styled_range(start, suffix.len(), style);
     }
 
-    pub(super) fn spans(&self) -> Vec<Span<'static>> {
+    pub(in crate::tui) fn spans(&self) -> Vec<Span<'static>> {
         let mut boundaries = vec![0, self.text.len()];
         for highlight in &self.mention_highlights {
             push_range_boundaries(
@@ -257,7 +257,7 @@ fn push_range_boundaries(boundaries: &mut Vec<usize>, start: usize, end: usize, 
 }
 
 #[cfg(test)]
-pub(super) fn format_message_content(message: &MessageState, width: usize) -> String {
+pub(in crate::tui) fn format_message_content(message: &MessageState, width: usize) -> String {
     format_message_content_lines(message, &DashboardState::new(), width)
         .into_iter()
         .map(|line| line.text)
@@ -265,7 +265,7 @@ pub(super) fn format_message_content(message: &MessageState, width: usize) -> St
         .join(" ")
 }
 
-pub(super) fn format_message_content_lines(
+pub(in crate::tui) fn format_message_content_lines(
     message: &MessageState,
     state: &DashboardState,
     width: usize,
@@ -275,7 +275,7 @@ pub(super) fn format_message_content_lines(
     lines
 }
 
-pub(super) fn format_message_content_lines_with_loaded_custom_emoji_urls(
+pub(in crate::tui) fn format_message_content_lines_with_loaded_custom_emoji_urls(
     message: &MessageState,
     state: &DashboardState,
     width: usize,
@@ -291,7 +291,7 @@ pub(super) fn format_message_content_lines_with_loaded_custom_emoji_urls(
     lines
 }
 
-pub(super) fn format_message_content_sections(
+pub(in crate::tui) fn format_message_content_sections(
     message: &MessageState,
     state: &DashboardState,
     width: usize,
@@ -299,7 +299,7 @@ pub(super) fn format_message_content_sections(
     format_message_content_sections_with_loaded_custom_emoji_urls(message, state, width, &[])
 }
 
-pub(super) fn format_message_content_sections_with_loaded_custom_emoji_urls(
+pub(in crate::tui) fn format_message_content_sections_with_loaded_custom_emoji_urls(
     message: &MessageState,
     state: &DashboardState,
     width: usize,
@@ -701,7 +701,7 @@ fn embed_line_color(embed: &EmbedInfo) -> Color {
     embed.color.map(embed_color).unwrap_or(Color::Red)
 }
 
-pub(super) fn embed_color(color: u32) -> Color {
+pub(in crate::tui) fn embed_color(color: u32) -> Color {
     Color::Rgb(
         ((color >> 16) & 0xff) as u8,
         ((color >> 8) & 0xff) as u8,
@@ -709,7 +709,7 @@ pub(super) fn embed_color(color: u32) -> Color {
     )
 }
 
-pub(super) fn format_message_reaction_lines(
+pub(in crate::tui) fn format_message_reaction_lines(
     reactions: &[ReactionInfo],
     width: usize,
     show_custom_emoji: bool,
@@ -1673,7 +1673,7 @@ fn prefix_message_content_line_with_style(
     line
 }
 
-pub(super) fn wrap_text_lines(value: &str, width: usize) -> Vec<String> {
+pub(in crate::tui) fn wrap_text_lines(value: &str, width: usize) -> Vec<String> {
     if value.is_empty() {
         return Vec::new();
     }
@@ -1920,7 +1920,7 @@ fn poll_box_width(width: usize) -> usize {
     width.clamp(4, 72)
 }
 
-pub(super) fn poll_box_border(left: char, right: char, width: usize) -> String {
+pub(in crate::tui) fn poll_box_border(left: char, right: char, width: usize) -> String {
     let width = poll_box_width(width);
     format!("{left}{}{right}", "─".repeat(width.saturating_sub(2)))
 }
@@ -2338,7 +2338,7 @@ fn format_latest_message_preview(
     format!("{prefix}{content}{suffix}")
 }
 
-pub(super) fn format_message_relative_age(message_id: Id<MessageMarker>) -> String {
+pub(in crate::tui) fn format_message_relative_age(message_id: Id<MessageMarker>) -> String {
     let created = message_time::message_unix_millis(message_id);
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2479,7 +2479,7 @@ fn format_forwarded_time(timestamp: &str) -> String {
         .to_owned()
 }
 
-pub(super) fn format_attachment_summary(attachments: &[AttachmentInfo]) -> String {
+pub(in crate::tui) fn format_attachment_summary(attachments: &[AttachmentInfo]) -> String {
     format_attachment_summary_lines(attachments).join(" | ")
 }
 
@@ -2503,7 +2503,7 @@ fn format_attachment(attachment: &AttachmentInfo) -> String {
     format!("[{kind}: {}]{}", attachment.filename, dimensions)
 }
 
-pub(super) fn mention_highlight_style(kind: TextHighlightKind) -> Style {
+pub(in crate::tui) fn mention_highlight_style(kind: TextHighlightKind) -> Style {
     match kind {
         // The current user got pinged, so match Discord's gold highlight.
         TextHighlightKind::SelfMention => Style::default()

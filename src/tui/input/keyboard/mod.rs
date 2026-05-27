@@ -74,7 +74,7 @@ pub fn handle_key(state: &mut DashboardState, key: KeyEvent) -> Option<AppComman
         None => {}
     }
 
-    if let Some(action) = state.key_bindings().dashboard_action(key, focus) {
+    if let Some(action) = state.key_bindings().dashboard_action(key) {
         return handle_dashboard_action(state, focus, action);
     }
 

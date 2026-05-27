@@ -16,7 +16,7 @@ use unicode_width::UnicodeWidthStr;
 use super::state::MemberEntry;
 use super::{
     format::truncate_display_width,
-    message_format::{
+    message::format::{
         EMOJI_REACTION_IMAGE_WIDTH, MessageContentLine, ReactionLayout, embed_color,
         format_message_content_lines_with_loaded_custom_emoji_urls,
         format_message_content_sections_with_loaded_custom_emoji_urls, format_message_relative_age,
@@ -47,14 +47,14 @@ const UNREAD_BRIGHT: Color = Color::Reset;
 
 mod activity;
 mod forum;
-mod interaction;
+mod hit_test;
 mod layout;
-mod message_list;
+mod message;
 mod panes;
 mod popups;
 mod types;
 
-pub(crate) use self::interaction::{focus_pane_at, mouse_target_at, user_profile_popup_contains};
+pub(crate) use self::hit_test::{focus_pane_at, mouse_target_at, user_profile_popup_contains};
 use self::layout::{
     attachment_viewer_image_area, attachment_viewer_popup, centered_rect, dashboard_areas,
     inline_image_preview_area, inline_image_preview_height, inline_image_preview_width,
@@ -63,7 +63,7 @@ use self::layout::{
 };
 #[cfg(test)]
 use self::layout::{composer_content_line_count, composer_prompt_line_count};
-use self::message_list::render_messages;
+use self::message::list::render_messages;
 #[cfg(test)]
 use self::panes::{
     composer_cursor_position, composer_lines, composer_lines_with_loaded_custom_emoji_urls,
@@ -95,7 +95,7 @@ use self::{
     forum::{
         forum_post_reaction_summary, forum_post_scrollbar_visible_count, forum_post_viewport_lines,
     },
-    message_list::{
+    message::list::{
         date_separator_line, format_message_sent_time, inline_image_preview_row,
         message_author_style, message_body_custom_emoji_rows, message_item_lines,
         message_viewport_layout, message_viewport_lines, new_messages_notice_line,
@@ -319,16 +319,6 @@ fn render_vertical_scrollbar(
     frame.render_stateful_widget(scrollbar, area, &mut state);
 }
 
-/// Clamps the visible width of a `Line` to `max_width` columns by truncating
-/// each contained span, then pads the remainder with explicit spaces so the
-/// rendered line covers exactly `max_width` cells.
-///
-/// Truncation prevents `Paragraph` from wrapping a long line and bleeding the
-/// continuation onto adjacent rows. Padding to the full width ensures every
-/// cell in the popup row is painted by `Paragraph`. Windows Terminal under WSL
-/// does not always clear the right-hand cell of a wide grapheme such as Korean
-/// text or emoji when ratatui's diff sends a default-style space via `Clear`.
-/// Writing an explicit styled space through the paragraph fixes the residue.
 fn channel_prefix(kind: &str) -> &'static str {
     match kind {
         "dm" | "Private" => "@ ",

@@ -29,15 +29,16 @@ use super::{
     leader_action_lines_for_test, member_display_label, member_name_style,
     message_action_menu_lines, message_author_style, message_body_custom_emoji_rows,
     message_delete_confirmation_lines, message_item_lines, message_pin_confirmation_lines,
-    message_url_picker_lines_for_width, message_viewport_lines, new_messages_notice_line,
-    options_popup_lines, poll_vote_picker_lines, primary_activity_summary, quit_confirmation_lines,
-    reaction_users_popup_lines, reaction_users_visible_line_count, render_channels, render_guilds,
-    render_header, render_members, selected_avatar_x_offset, selected_message_card_width,
+    message_url_picker_lines_for_width, message_viewport_layout, message_viewport_lines,
+    new_messages_notice_line, options_popup_lines, poll_vote_picker_lines,
+    primary_activity_summary, quit_confirmation_lines, reaction_users_popup_lines,
+    reaction_users_visible_line_count, render_channels, render_guilds, render_header,
+    render_members, selected_avatar_x_offset, selected_message_card_width,
     selected_message_content_x_offset, sync_view_heights, toast_area, toast_line,
     user_profile_popup_has_avatar, user_profile_popup_lines,
     user_profile_popup_lines_with_activities, user_profile_popup_text_geometry,
 };
-use crate::tui::message_time::{
+use crate::tui::message::time::{
     discord_epoch_unix_millis, format_unix_millis_with_offset, message_starts_new_day,
     test_message_id_for_unix_millis,
 };
@@ -55,7 +56,7 @@ use crate::{
     },
     tui::{
         format::{TextHighlightKind, truncate_display_width, truncate_display_width_from},
-        message_format::{
+        message::format::{
             MessageContentLine, format_message_content, format_message_content_lines,
             format_message_content_lines_with_loaded_custom_emoji_urls, lay_out_reaction_chips,
             mention_highlight_style, poll_box_border, poll_card_inner_width,
@@ -88,6 +89,24 @@ fn find_cell(buffer: &Buffer, text: &str) -> Option<(u16, u16)> {
         }
     }
     None
+}
+
+fn default_message_viewport_layout() -> super::MessageViewportLayout {
+    message_viewport_layout(200, 80, 80, 16, 3)
+}
+
+fn narrow_message_viewport_layout(content_width: usize) -> super::MessageViewportLayout {
+    message_viewport_layout(content_width, 80, 80, 16, 3)
+}
+
+fn selected_message_viewport_layout(content_width: usize) -> super::MessageViewportLayout {
+    message_viewport_layout(
+        content_width,
+        80,
+        selected_message_card_width(80, true),
+        16,
+        3,
+    )
 }
 
 fn rendered_guild_rows(state: &DashboardState, width: u16, height: u16) -> Vec<String> {

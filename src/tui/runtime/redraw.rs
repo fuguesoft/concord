@@ -15,16 +15,16 @@ use crate::discord::ids::{
     marker::{ChannelMarker, GuildMarker, UserMarker},
 };
 
-use super::state::{ActiveModalPopupKind, DashboardState};
+use super::super::state::{ActiveModalPopupKind, DashboardState};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct VisibleDashboardSignature {
+pub(in crate::tui) struct VisibleDashboardSignature {
     layout: LayoutSignature,
     header: HeaderSignature,
     overlay: OverlaySignature,
-    pub(super) guilds: GuildPaneSignature,
-    pub(super) channels: ChannelPaneSignature,
-    pub(super) messages: MessagePaneSignature,
+    pub(in crate::tui) guilds: GuildPaneSignature,
+    pub(in crate::tui) channels: ChannelPaneSignature,
+    pub(in crate::tui) messages: MessagePaneSignature,
     members: MemberPaneSignature,
 }
 
@@ -67,29 +67,29 @@ struct ChannelSwitcherSignature {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct GuildPaneSignature {
+pub(in crate::tui) struct GuildPaneSignature {
     guild_horizontal_scroll: usize,
-    pub(super) visible_guilds: Vec<GuildEntrySignature>,
+    pub(in crate::tui) visible_guilds: Vec<GuildEntrySignature>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct ChannelPaneSignature {
+pub(in crate::tui) struct ChannelPaneSignature {
     channel_horizontal_scroll: usize,
-    pub(super) visible_channels: Vec<ChannelEntrySignature>,
+    pub(in crate::tui) visible_channels: Vec<ChannelEntrySignature>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct MessagePaneSignature {
+pub(in crate::tui) struct MessagePaneSignature {
     selected_message: usize,
     message_scroll: usize,
     message_line_scroll: usize,
-    pub(super) new_messages_count: usize,
+    pub(in crate::tui) new_messages_count: usize,
     message_pane_title: String,
     typing_footer: Option<String>,
     composer_mention_query: Option<String>,
     composer_mention_selected: usize,
     composer_mention_candidates: DebugSignature,
-    pub(super) visible_messages: Vec<DebugSignature>,
+    pub(in crate::tui) visible_messages: Vec<DebugSignature>,
     visible_forum_posts: Vec<DebugSignature>,
 }
 
@@ -205,7 +205,7 @@ struct MemberEntrySignature {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct DebugSignature(u64);
+pub(in crate::tui) struct DebugSignature(u64);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ChannelSwitcherItemSignature {
@@ -219,14 +219,14 @@ struct ChannelSwitcherItemSignature {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct GuildEntrySignature {
+pub(in crate::tui) struct GuildEntrySignature {
     row: DebugSignature,
     unread_count: Option<usize>,
     unread_state: Option<ChannelUnreadState>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct ChannelEntrySignature {
+pub(in crate::tui) struct ChannelEntrySignature {
     row: DebugSignature,
     unread: Option<ChannelUnreadState>,
     unread_message_count: Option<usize>,
@@ -268,7 +268,9 @@ impl VisibleDashboardChangeSet {
     }
 }
 
-pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDashboardSignature {
+pub(in crate::tui) fn visible_dashboard_signature(
+    state: &DashboardState,
+) -> VisibleDashboardSignature {
     let member_start = state.member_scroll();
     let member_end = member_start.saturating_add(state.member_content_height());
     let channel_switcher_open = state.is_active_modal_popup(ActiveModalPopupKind::ChannelSwitcher);
@@ -595,7 +597,7 @@ fn debug_signature<T: fmt::Debug>(value: &T) -> DebugSignature {
     DebugSignature(writer.hasher.finish())
 }
 
-pub(super) fn should_suppress_image_redraw_for_signature_change(
+pub(in crate::tui) fn should_suppress_image_redraw_for_signature_change(
     before: &VisibleDashboardSignature,
     after: &VisibleDashboardSignature,
     image_surfaces_visible: bool,
@@ -607,7 +609,7 @@ pub(super) fn should_suppress_image_redraw_for_signature_change(
                 && changes.only_new_message_notice_changed()))
 }
 
-pub(super) fn should_redraw_after_visible_signature_change(
+pub(in crate::tui) fn should_redraw_after_visible_signature_change(
     before: &VisibleDashboardSignature,
     after: &VisibleDashboardSignature,
     image_surfaces_visible: bool,
