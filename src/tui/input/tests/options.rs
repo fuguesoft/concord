@@ -8,7 +8,7 @@ fn options_popup_toggles_selected_setting() {
     handle_key(&mut state, key(KeyCode::Down));
     handle_key(&mut state, key(KeyCode::Enter));
 
-    assert!(state.is_options_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::Options));
     assert!(!state.display_options().show_avatars);
     assert_eq!(
         state.take_options_save_request(),
@@ -111,7 +111,7 @@ fn options_popup_esc_closes_popup() {
     state.open_options_popup();
     handle_key(&mut state, key(KeyCode::Esc));
 
-    assert!(!state.is_options_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::Options));
 }
 
 #[test]

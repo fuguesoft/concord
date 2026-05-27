@@ -388,7 +388,7 @@ fn enter_opens_member_actions_from_member_pane() {
 
     assert_eq!(command, None);
     assert!(state.is_member_leader_action_active());
-    assert!(!state.is_user_profile_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::UserProfile));
 }
 
 #[test]

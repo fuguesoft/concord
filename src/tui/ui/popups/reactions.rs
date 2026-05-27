@@ -7,7 +7,7 @@ pub(in crate::tui::ui) fn render_emoji_reaction_picker(
     state: &DashboardState,
     emoji_images: Vec<EmojiImage<'_>>,
 ) {
-    if !state.is_emoji_reaction_picker_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::EmojiReactionPicker) {
         return;
     }
 
@@ -90,6 +90,10 @@ pub(in crate::tui::ui) fn render_reaction_users_popup(
     area: Rect,
     state: &DashboardState,
 ) {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::ReactionUsers) {
+        return;
+    }
+
     let Some(popup_state) = state.reaction_users_popup() else {
         return;
     };

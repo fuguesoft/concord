@@ -11,7 +11,7 @@ use crate::{
 use super::super::{
     message_format::format_message_content_lines,
     selection,
-    state::{DashboardState, MAX_MENTION_PICKER_VISIBLE},
+    state::{ActiveModalPopupKind, DashboardState, MAX_MENTION_PICKER_VISIBLE},
     ui::ImagePreviewLayout,
 };
 
@@ -579,7 +579,7 @@ pub(in crate::tui) fn visible_emoji_image_targets(state: &DashboardState) -> Vec
         }
     }
 
-    if state.is_emoji_reaction_picker_open() {
+    if state.is_active_modal_popup(ActiveModalPopupKind::EmojiReactionPicker) {
         let reactions = state.filtered_emoji_reaction_items_slice().unwrap_or(&[]);
         if !reactions.is_empty() {
             let selected = state

@@ -5,6 +5,10 @@ pub(in crate::tui::ui) fn render_message_delete_confirmation(
     area: Rect,
     state: &DashboardState,
 ) {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::MessageDeleteConfirmation) {
+        return;
+    }
+
     let Some((author, content)) = state.message_delete_confirmation_lines() else {
         return;
     };
@@ -30,6 +34,10 @@ pub(in crate::tui::ui) fn render_message_pin_confirmation(
     area: Rect,
     state: &DashboardState,
 ) {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::MessagePinConfirmation) {
+        return;
+    }
+
     let Some((pinned, author, content)) = state.message_pin_confirmation_lines() else {
         return;
     };
@@ -61,7 +69,7 @@ pub(in crate::tui::ui) fn render_quit_confirmation(
     area: Rect,
     state: &DashboardState,
 ) {
-    if !state.is_quit_confirmation_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::QuitConfirmation) {
         return;
     }
 
@@ -81,6 +89,10 @@ pub(in crate::tui::ui) fn render_guild_leave_confirmation(
     area: Rect,
     state: &DashboardState,
 ) {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::GuildLeaveConfirmation) {
+        return;
+    }
+
     let Some(name) = state.guild_leave_confirmation_name() else {
         return;
     };

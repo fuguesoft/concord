@@ -7,11 +7,13 @@ fn quit_key_requires_confirmation() {
     handle_key(&mut state, char_key('q'));
 
     assert!(!state.should_quit());
-    assert!(state.is_quit_confirmation_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::QuitConfirmation));
 
     handle_key(&mut state, char_key('n'));
     assert!(!state.should_quit());
-    assert!(!state.is_quit_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::QuitConfirmation)
+    );
 
     handle_key(&mut state, char_key('q'));
     handle_key(&mut state, char_key('y'));
@@ -24,7 +26,7 @@ fn question_mark_opens_current_keymap_popup_and_scrolls_within_bounds() {
     let mut state = DashboardState::new();
     handle_key(&mut state, char_key('?'));
 
-    assert!(state.is_keymap_help_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::KeymapHelp));
 
     state.set_keymap_popup_view_height(4);
     state.set_keymap_popup_total_lines(10);
@@ -40,7 +42,7 @@ fn question_mark_opens_current_keymap_popup_and_scrolls_within_bounds() {
 
     handle_key(&mut state, key(KeyCode::Esc));
 
-    assert!(!state.is_keymap_help_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::KeymapHelp));
 }
 
 #[test]
@@ -88,7 +90,7 @@ fn backtick_types_while_composing() {
     handle_key(&mut state, char_key('`'));
 
     assert!(state.is_composing());
-    assert!(!state.is_debug_log_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::DebugLog));
     assert_eq!(state.composer_input(), "`");
 }
 
@@ -99,7 +101,7 @@ fn a_key_no_longer_opens_actions_directly() {
 
     handle_key(&mut state, char_key('a'));
 
-    assert!(!state.is_message_action_menu_open());
+    assert!(!state.is_message_action_context_active());
     assert!(!state.is_channel_leader_action_active());
 }
 
@@ -113,7 +115,7 @@ fn esc_closes_modal_before_returning_from_opened_thread() {
     handle_key(&mut state, char_key('`'));
     handle_key(&mut state, key(KeyCode::Esc));
 
-    assert!(!state.is_debug_log_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::DebugLog));
     assert_eq!(state.selected_channel_id(), Some(Id::new(10)));
 
     handle_key(&mut state, key(KeyCode::Esc));

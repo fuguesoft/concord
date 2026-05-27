@@ -122,10 +122,10 @@ fn backtick_toggles_debug_log_popup() {
     let mut state = DashboardState::new();
 
     handle_key(&mut state, char_key('`'));
-    assert!(state.is_debug_log_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::DebugLog));
 
     handle_key(&mut state, char_key('`'));
-    assert!(!state.is_debug_log_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::DebugLog));
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn esc_closes_debug_log_popup_modally() {
 
     handle_key(&mut state, key(KeyCode::Esc));
 
-    assert!(!state.is_debug_log_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::DebugLog));
     assert_eq!(state.focus(), FocusPane::Messages);
 }
 
@@ -171,7 +171,7 @@ fn message_action_menu_navigation_is_modal() {
 
     handle_key(&mut state, key(KeyCode::Esc));
 
-    assert!(!state.is_message_action_menu_open());
+    assert!(!state.is_message_action_context_active());
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn message_action_shortcuts_edit_and_delete_own_message() {
     let command = handle_key(&mut edit_state, char_key('e'));
 
     assert_eq!(command, None);
-    assert!(!edit_state.is_message_action_menu_open());
+    assert!(!edit_state.is_message_action_context_active());
     assert!(edit_state.is_composing());
 
     let mut delete_state = state_with_own_message();
@@ -252,8 +252,12 @@ fn message_action_shortcuts_edit_and_delete_own_message() {
     let command = handle_key(&mut delete_state, char_key('d'));
 
     assert_eq!(command, None);
-    assert!(!delete_state.is_message_action_menu_open());
-    assert!(delete_state.is_message_delete_confirmation_open());
+    assert!(!delete_state.is_message_action_context_active());
+    assert!(
+        delete_state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 
     let command = handle_key(&mut delete_state, key(KeyCode::Enter));
 
@@ -264,7 +268,11 @@ fn message_action_shortcuts_edit_and_delete_own_message() {
             message_id: Id::new(1),
         })
     );
-    assert!(!delete_state.is_message_delete_confirmation_open());
+    assert!(
+        !delete_state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 }
 
 #[test]
@@ -272,7 +280,10 @@ fn message_pane_shortcuts_reuse_message_actions() {
     let mut reaction_state = state_with_messages(1);
     reaction_state.focus_pane(FocusPane::Messages);
     handle_key(&mut reaction_state, char_key('r'));
-    assert!(reaction_state.is_emoji_reaction_picker_open());
+    assert!(
+        reaction_state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 
     let mut reply_state = state_with_messages(1);
     reply_state.focus_pane(FocusPane::Messages);
@@ -302,7 +313,10 @@ fn direct_message_shortcuts_work_from_message_pane() {
     let mut reaction_state = state_with_messages(1);
     reaction_state.focus_pane(FocusPane::Messages);
     handle_key(&mut reaction_state, char_key('r'));
-    assert!(reaction_state.is_emoji_reaction_picker_open());
+    assert!(
+        reaction_state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 
     let mut reply_state = state_with_messages(1);
     reply_state.focus_pane(FocusPane::Messages);
@@ -313,7 +327,10 @@ fn direct_message_shortcuts_work_from_message_pane() {
     pin_state.focus_pane(FocusPane::Messages);
     let command = handle_key(&mut pin_state, char_key('P'));
     assert_eq!(command, None);
-    assert!(pin_state.is_message_pin_confirmation_open());
+    assert!(
+        pin_state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessagePinConfirmation)
+    );
 }
 
 #[test]
@@ -329,8 +346,8 @@ fn open_url_shortcut_opens_url_or_url_picker() {
     let command = handle_key(&mut state, char_key('o'));
 
     assert_eq!(command, None);
-    assert!(state.is_message_url_picker_open());
-    assert!(!state.is_message_action_menu_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessageUrlPicker));
+    assert!(!state.is_message_action_context_active());
 
     let command = handle_key(&mut state, char_key('2'));
 
@@ -340,8 +357,10 @@ fn open_url_shortcut_opens_url_or_url_picker() {
             url: "https://two.example".to_owned(),
         })
     );
-    assert!(!state.is_message_url_picker_open());
-    assert!(!state.is_message_action_menu_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessageUrlPicker)
+    );
+    assert!(!state.is_message_action_context_active());
 }
 
 #[test]
@@ -365,10 +384,18 @@ fn message_pane_delete_shortcut_requires_confirmation() {
     let command = handle_key(&mut state, char_key('d'));
 
     assert_eq!(command, None);
-    assert!(state.is_message_delete_confirmation_open());
+    assert!(
+        state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 
     handle_key(&mut state, key(KeyCode::Esc));
-    assert!(!state.is_message_delete_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 
     handle_key(&mut state, char_key('d'));
     let command = handle_key(&mut state, char_key('y'));
@@ -380,7 +407,11 @@ fn message_pane_delete_shortcut_requires_confirmation() {
             message_id: Id::new(1),
         })
     );
-    assert!(!state.is_message_delete_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 }
 
 #[test]
@@ -390,7 +421,7 @@ fn message_pane_view_attachment_shortcut_opens_viewer() {
 
     handle_key(&mut state, char_key('v'));
 
-    assert!(state.is_attachment_viewer_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::AttachmentViewer));
     assert_eq!(
         state
             .selected_attachment_viewer_item()
@@ -413,7 +444,7 @@ fn message_pane_profile_shortcut_opens_author_profile() {
             guild_id: Some(Id::new(1)),
         })
     );
-    assert!(state.is_user_profile_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::UserProfile));
 }
 
 #[test]
@@ -424,10 +455,16 @@ fn message_pane_pin_shortcut_requires_confirmation() {
     let command = handle_key(&mut state, char_key('P'));
 
     assert_eq!(command, None);
-    assert!(state.is_message_pin_confirmation_open());
+    assert!(
+        state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessagePinConfirmation)
+    );
 
     handle_key(&mut state, key(KeyCode::Esc));
-    assert!(!state.is_message_pin_confirmation_open());
+    assert!(
+        !state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessagePinConfirmation)
+    );
 
     handle_key(&mut state, char_key('P'));
     let command = handle_key(&mut state, key(KeyCode::Enter));
@@ -440,7 +477,10 @@ fn message_pane_pin_shortcut_requires_confirmation() {
             pinned: true,
         })
     );
-    assert!(!state.is_message_pin_confirmation_open());
+    assert!(
+        !state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessagePinConfirmation)
+    );
 }
 
 #[test]
@@ -452,7 +492,7 @@ fn message_action_menu_control_page_keys_move_selection() {
     let command = handle_key(&mut state, ctrl_key('d'));
 
     assert_eq!(command, None);
-    assert!(state.is_message_action_menu_open());
+    assert!(state.is_message_action_context_active());
     assert_eq!(state.selected_message_action_index(), Some(10));
 
     handle_key(&mut state, ctrl_key('u'));
@@ -468,8 +508,8 @@ fn direct_view_attachment_shortcut_opens_viewer_and_esc_closes_viewer() {
     let command = handle_key(&mut state, char_key('v'));
 
     assert_eq!(command, None);
-    assert!(!state.is_message_action_menu_open());
-    assert!(state.is_attachment_viewer_open());
+    assert!(!state.is_message_action_context_active());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::AttachmentViewer));
     assert_eq!(
         state
             .selected_attachment_viewer_item()
@@ -526,7 +566,9 @@ fn direct_view_attachment_shortcut_opens_viewer_and_esc_closes_viewer() {
     );
 
     handle_key(&mut state, key(KeyCode::Esc));
-    assert!(!state.is_attachment_viewer_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::AttachmentViewer)
+    );
 }
 
 #[test]
@@ -567,7 +609,7 @@ fn reaction_users_popup_is_modal_and_escape_closes_it() {
     handle_key(&mut state, key(KeyCode::Down));
 
     assert_eq!(state.selected_message(), 1);
-    assert!(state.is_reaction_users_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ReactionUsers));
     assert_eq!(
         state.reaction_users_popup().map(|popup| popup.scroll()),
         Some(1)
@@ -576,7 +618,7 @@ fn reaction_users_popup_is_modal_and_escape_closes_it() {
     let command = handle_key(&mut state, key(KeyCode::Esc));
 
     assert_eq!(command, None);
-    assert!(!state.is_reaction_users_popup_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ReactionUsers));
 }
 
 #[test]
@@ -606,7 +648,7 @@ fn poll_picker_selection_aliases_move_selection() {
     handle_key(&mut state, key(KeyCode::Enter));
     handle_key(&mut state, char_key('c'));
 
-    assert!(state.is_poll_vote_picker_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::PollVotePicker));
 
     handle_key(&mut state, ctrl_key('n'));
     assert_eq!(state.selected_poll_vote_picker_index(), Some(1));

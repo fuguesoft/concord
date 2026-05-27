@@ -7,6 +7,10 @@ pub(in crate::tui::ui) fn render_attachment_viewer(
     state: &DashboardState,
     image_preview: Option<ImagePreview<'_>>,
 ) {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::AttachmentViewer) {
+        return;
+    }
+
     let Some(item) = state.selected_attachment_viewer_item() else {
         return;
     };

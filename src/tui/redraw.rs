@@ -15,7 +15,7 @@ use crate::discord::ids::{
     marker::{ChannelMarker, GuildMarker, UserMarker},
 };
 
-use super::state::DashboardState;
+use super::state::{ActiveModalPopupKind, DashboardState};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct VisibleDashboardSignature {
@@ -271,7 +271,23 @@ impl VisibleDashboardChangeSet {
 pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDashboardSignature {
     let member_start = state.member_scroll();
     let member_end = member_start.saturating_add(state.member_content_height());
-    let channel_switcher_items = if state.is_channel_switcher_open() {
+    let channel_switcher_open = state.is_active_modal_popup(ActiveModalPopupKind::ChannelSwitcher);
+    let leader_active = state.is_active_modal_popup(ActiveModalPopupKind::Leader);
+    let message_action_open = state.is_message_action_context_active();
+    let message_url_picker_open =
+        state.is_active_modal_popup(ActiveModalPopupKind::MessageUrlPicker);
+    let attachment_viewer_open =
+        state.is_active_modal_popup(ActiveModalPopupKind::AttachmentViewer);
+    let options_open = state.is_active_modal_popup(ActiveModalPopupKind::Options);
+    let emoji_picker_open = state.is_active_modal_popup(ActiveModalPopupKind::EmojiReactionPicker);
+    let reaction_users_open = state.is_active_modal_popup(ActiveModalPopupKind::ReactionUsers);
+    let poll_vote_picker_open = state.is_active_modal_popup(ActiveModalPopupKind::PollVotePicker);
+    let user_profile_open = state.is_active_modal_popup(ActiveModalPopupKind::UserProfile);
+    let debug_log_open = state.is_active_modal_popup(ActiveModalPopupKind::DebugLog);
+    let keymap_help_open = state.is_active_modal_popup(ActiveModalPopupKind::KeymapHelp);
+    let quit_confirmation_open =
+        state.is_active_modal_popup(ActiveModalPopupKind::QuitConfirmation);
+    let channel_switcher_items = if channel_switcher_open {
         state.channel_switcher_items()
     } else {
         Vec::new()
@@ -291,18 +307,16 @@ pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDash
             update_available_version: state.update_available_version().map(str::to_owned),
         },
         overlay: OverlaySignature {
-            leader_active: state.is_leader_active(),
+            leader_active,
             leader_action_mode: state.is_leader_action_mode(),
-            leader_title: state
-                .is_leader_active()
-                .then(|| state.leader_keymap_title()),
+            leader_title: leader_active.then(|| state.leader_keymap_title()),
             leader_shortcuts: state
                 .leader_keymap_shortcuts()
                 .into_iter()
                 .map(|item| (item.key, item.label, item.has_children))
                 .collect(),
             channel_switcher: ChannelSwitcherSignature {
-                open: state.is_channel_switcher_open(),
+                open: channel_switcher_open,
                 query: state.channel_switcher_query().map(str::to_owned),
                 query_cursor: state.channel_switcher_query_cursor_byte_index(),
                 selected: state.selected_channel_switcher_index(),
@@ -312,28 +326,28 @@ pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDash
             channel_action_threads_phase: state.is_channel_action_threads_phase(),
             popups: VisiblePopupSignature {
                 message_actions: MessageActionPopupSignature {
-                    message_action_open: state.is_message_action_menu_open(),
+                    message_action_open,
                     selected_message_action_index: state.selected_message_action_index(),
-                    message_action_items: if state.is_message_action_menu_open() {
+                    message_action_items: if message_action_open {
                         debug_signature(&state.selected_message_action_items())
                     } else {
                         debug_signature(&())
                     },
                     delete_confirmation_lines: state.message_delete_confirmation_lines(),
                     pin_confirmation_lines: state.message_pin_confirmation_lines(),
-                    quit_confirmation_open: state.is_quit_confirmation_open(),
+                    quit_confirmation_open,
                 },
                 message_url_picker: MessageUrlPickerPopupSignature {
-                    message_url_picker_open: state.is_message_url_picker_open(),
+                    message_url_picker_open,
                     selected_message_url_index: state.selected_message_url_index(),
-                    message_url_items: if state.is_message_url_picker_open() {
+                    message_url_items: if message_url_picker_open {
                         debug_signature(&state.selected_message_url_items())
                     } else {
                         debug_signature(&())
                     },
                 },
                 attachment_viewer: AttachmentViewerPopupSignature {
-                    attachment_viewer_open: state.is_attachment_viewer_open(),
+                    attachment_viewer_open,
                     selected_attachment_viewer_item: debug_signature(
                         &state.selected_attachment_viewer_item(),
                     ),
@@ -352,7 +366,7 @@ pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDash
                     member_action_items: debug_signature(&state.selected_member_action_items()),
                 },
                 options: OptionsPopupSignature {
-                    options_open: state.is_options_popup_open(),
+                    options_open,
                     options_title: state.options_popup_title(),
                     selected_option: state.selected_option_index(),
                     display_options: state.display_options(),
@@ -360,8 +374,8 @@ pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDash
                     voice_options: state.voice_options(),
                 },
                 message_interactions: MessageInteractionPopupSignature {
-                    emoji_picker_open: state.is_emoji_reaction_picker_open(),
-                    selected_emoji_reaction_index: if state.is_emoji_reaction_picker_open() {
+                    emoji_picker_open,
+                    selected_emoji_reaction_index: if emoji_picker_open {
                         state.selected_emoji_reaction_index_for_len(
                             state.filtered_emoji_reaction_items().len(),
                         )
@@ -369,29 +383,29 @@ pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDash
                         None
                     },
                     emoji_reaction_filter: state.emoji_reaction_filter().map(str::to_owned),
-                    filtered_emoji_reaction_items: if state.is_emoji_reaction_picker_open() {
+                    filtered_emoji_reaction_items: if emoji_picker_open {
                         debug_signature(&state.filtered_emoji_reaction_items())
                     } else {
                         debug_signature(&())
                     },
-                    existing_emoji_reactions: if state.is_emoji_reaction_picker_open() {
+                    existing_emoji_reactions: if emoji_picker_open {
                         debug_signature(&state.existing_emoji_reactions())
                     } else {
                         debug_signature(&())
                     },
-                    own_emoji_reactions: if state.is_emoji_reaction_picker_open() {
+                    own_emoji_reactions: if emoji_picker_open {
                         debug_signature(&state.own_emoji_reactions())
                     } else {
                         debug_signature(&())
                     },
-                    reaction_users_open: state.is_reaction_users_popup_open(),
+                    reaction_users_open,
                     reaction_users_popup: debug_signature(&state.reaction_users_popup()),
-                    poll_vote_picker_open: state.is_poll_vote_picker_open(),
+                    poll_vote_picker_open,
                     selected_poll_vote_picker_index: state.selected_poll_vote_picker_index(),
                     poll_vote_picker_items: debug_signature(&state.poll_vote_picker_items()),
                 },
                 profile: ProfilePopupSignature {
-                    user_profile_open: state.is_user_profile_popup_open(),
+                    user_profile_open,
                     user_profile_data: debug_signature(&state.user_profile_popup_data()),
                     user_profile_error: state.user_profile_popup_load_error().map(str::to_owned),
                     user_profile_status: state.user_profile_popup_status(),
@@ -404,19 +418,19 @@ pub(super) fn visible_dashboard_signature(state: &DashboardState) -> VisibleDash
                     ),
                 },
                 diagnostics: DiagnosticsPopupSignature {
-                    debug_log_open: state.is_debug_log_popup_open(),
-                    debug_log_lines: if state.is_debug_log_popup_open() {
+                    debug_log_open,
+                    debug_log_lines: if debug_log_open {
                         debug_signature(&state.debug_log_lines())
                     } else {
                         debug_signature(&())
                     },
-                    debug_channel_visibility: if state.is_debug_log_popup_open() {
+                    debug_channel_visibility: if debug_log_open {
                         debug_signature(&state.debug_channel_visibility())
                     } else {
                         debug_signature(&())
                     },
-                    keymap_help_open: state.is_keymap_help_popup_open(),
-                    keymap_help: if state.is_keymap_help_popup_open() {
+                    keymap_help_open,
+                    keymap_help: if keymap_help_open {
                         debug_signature(&state.keymap_binding_summaries())
                     } else {
                         debug_signature(&())

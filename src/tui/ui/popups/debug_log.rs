@@ -5,7 +5,7 @@ pub(in crate::tui::ui) fn render_debug_log_popup(
     area: Rect,
     state: &DashboardState,
 ) {
-    if !state.is_debug_log_popup_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::DebugLog) {
         return;
     }
 

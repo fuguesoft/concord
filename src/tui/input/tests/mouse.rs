@@ -164,7 +164,7 @@ fn left_click_selects_channel_switcher_row() {
         dashboard_area(),
     ));
 
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
     assert_eq!(state.selected_channel_switcher_index(), Some(1));
     assert_eq!(state.selected_channel_id(), None);
 }
@@ -182,7 +182,7 @@ fn double_click_activates_channel_switcher_row() {
     assert!(first.handled);
     assert_eq!(first.command, None);
     assert!(second.handled);
-    assert!(!state.is_channel_switcher_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
     assert_eq!(state.selected_channel_id(), Some(Id::new(12)));
     assert_eq!(
         second.command,
@@ -205,7 +205,7 @@ fn channel_switcher_absorbs_backdrop_clicks() {
         dashboard_area(),
     ));
 
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
     assert_eq!(state.focus(), FocusPane::Messages);
     assert_eq!(state.selected_channel(), 0);
 }
@@ -488,7 +488,7 @@ fn user_profile_popup_absorbs_left_clicks_only_inside_popup() {
         dashboard_area(),
     ));
     assert_eq!(state.focus(), FocusPane::Messages);
-    assert!(state.is_user_profile_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::UserProfile));
 
     assert!(handle_mouse(
         &mut state,
@@ -496,7 +496,7 @@ fn user_profile_popup_absorbs_left_clicks_only_inside_popup() {
         dashboard_area(),
     ));
     assert_eq!(state.focus(), FocusPane::Members);
-    assert!(state.is_user_profile_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::UserProfile));
 }
 
 #[test]
@@ -550,8 +550,8 @@ fn mouse_double_click_activates_message_action_row_like_enter() {
     );
 
     assert_eq!(second.command, None);
-    assert!(!state.is_message_action_menu_open());
-    assert!(state.is_poll_vote_picker_open());
+    assert!(!state.is_message_action_context_active());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::PollVotePicker));
 }
 
 #[test]

@@ -159,7 +159,10 @@ fn reaction_picker_requires_history_and_existing_or_add_reactions_permission() {
     without_add.focus_pane(FocusPane::Messages);
 
     without_add.open_emoji_reaction_picker();
-    assert!(!without_add.is_emoji_reaction_picker_open());
+    assert!(
+        !without_add
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 
     let mut with_add = state_with_other_user_message_permissions(
         PERM_VIEW_CHANNEL | PERM_READ_MESSAGE_HISTORY | PERM_ADD_REACTIONS,
@@ -168,7 +171,10 @@ fn reaction_picker_requires_history_and_existing_or_add_reactions_permission() {
     with_add.focus_pane(FocusPane::Messages);
 
     with_add.open_emoji_reaction_picker();
-    assert!(with_add.is_emoji_reaction_picker_open());
+    assert!(
+        with_add
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 }
 
 #[test]
@@ -180,7 +186,9 @@ fn existing_reaction_can_be_added_without_add_reactions_permission() {
     state.focus_pane(FocusPane::Messages);
     state.open_emoji_reaction_picker();
 
-    assert!(state.is_emoji_reaction_picker_open());
+    assert!(
+        state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
     assert_eq!(
         state
             .emoji_reaction_items()
@@ -284,7 +292,7 @@ fn show_reacted_users_action_loads_all_reaction_emojis() {
             ],
         })
     );
-    assert!(!state.is_message_action_menu_open());
+    assert!(!state.is_message_action_context_active());
 }
 
 #[test]
@@ -300,7 +308,7 @@ fn reaction_users_loaded_opens_popup_state() {
         }],
     });
 
-    assert!(state.is_reaction_users_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ReactionUsers));
     assert_eq!(
         state
             .reaction_users_popup()

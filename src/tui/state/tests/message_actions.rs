@@ -56,7 +56,7 @@ fn disabled_image_previews_do_not_hide_attachment_view_action() {
 
     state.direct_open_selected_message_attachment_viewer();
 
-    assert!(state.is_attachment_viewer_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::AttachmentViewer));
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn direct_attachment_message_action_opens_attachment_viewer() {
 
     state.direct_open_selected_message_attachment_viewer();
 
-    assert!(state.is_attachment_viewer_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::AttachmentViewer));
     assert_eq!(
         state.selected_attachment_viewer_item(),
         Some(super::AttachmentViewerItem {
@@ -129,7 +129,7 @@ fn attachment_viewer_navigation_clamps_and_downloads_current_attachment() {
             source: DownloadAttachmentSource::AttachmentViewer,
         })
     );
-    assert!(state.is_attachment_viewer_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::AttachmentViewer));
     assert_eq!(
         state.attachment_viewer_download_message(),
         Some("Downloading attachment...")
@@ -287,7 +287,11 @@ fn unhydrated_guild_permissions_keep_other_user_delete_available() {
 
     state.open_selected_message_delete_confirmation();
 
-    assert!(state.is_message_delete_confirmation_open());
+    assert!(
+        state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 }
 
 #[test]
@@ -303,7 +307,11 @@ fn other_user_message_actions_include_delete_with_manage_messages() {
 
     state.open_selected_message_delete_confirmation();
 
-    assert!(state.is_message_delete_confirmation_open());
+    assert!(
+        state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
     assert_eq!(
         state.confirm_message_delete(),
         Some(AppCommand::DeleteMessage {
@@ -323,7 +331,11 @@ fn other_user_delete_requires_manage_messages() {
 
     state.open_selected_message_delete_confirmation();
 
-    assert!(!state.is_message_delete_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 }
 
 #[test]
@@ -362,7 +374,11 @@ fn direct_delete_message_submits_delete_command_for_own_message() {
 
     state.open_selected_message_delete_confirmation();
 
-    assert!(state.is_message_delete_confirmation_open());
+    assert!(
+        state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
     assert_eq!(
         state.confirm_message_delete(),
         Some(AppCommand::DeleteMessage {
@@ -395,7 +411,11 @@ fn own_attachment_only_message_can_be_deleted_but_not_edited() {
 
     state.open_selected_message_delete_confirmation();
 
-    assert!(state.is_message_delete_confirmation_open());
+    assert!(
+        state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
     assert_eq!(
         state.confirm_message_delete(),
         Some(AppCommand::DeleteMessage {
@@ -415,7 +435,10 @@ fn direct_pin_message_requires_pin_messages_permission() {
 
     without_pin.direct_open_selected_message_pin_confirmation();
 
-    assert!(!without_pin.is_message_pin_confirmation_open());
+    assert!(
+        !without_pin
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessagePinConfirmation)
+    );
 
     let mut with_pin = state_with_other_user_message_permissions(
         PERM_VIEW_CHANNEL | PERM_READ_MESSAGE_HISTORY | PERM_PIN_MESSAGES,
@@ -425,7 +448,10 @@ fn direct_pin_message_requires_pin_messages_permission() {
 
     with_pin.direct_open_selected_message_pin_confirmation();
 
-    assert!(with_pin.is_message_pin_confirmation_open());
+    assert!(
+        with_pin
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessagePinConfirmation)
+    );
 }
 
 #[test]
@@ -447,7 +473,7 @@ fn reply_attachment_action_can_open_attachment_viewer() {
 
     state.direct_open_selected_message_attachment_viewer();
 
-    assert!(state.is_attachment_viewer_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::AttachmentViewer));
     assert_eq!(
         state.selected_attachment_viewer_item(),
         Some(super::AttachmentViewerItem {
@@ -478,7 +504,7 @@ fn direct_message_url_opens_single_url_from_message_content() {
             url: "https://example.com/docs".to_owned(),
         })
     );
-    assert!(!state.is_message_action_menu_open());
+    assert!(!state.is_message_action_context_active());
 }
 
 #[test]
@@ -493,8 +519,8 @@ fn direct_message_url_opens_url_picker_for_multiple_urls() {
     ));
     state.focus_pane(FocusPane::Messages);
     assert_eq!(state.direct_open_selected_message_url(), None);
-    assert!(state.is_message_url_picker_open());
-    assert!(!state.is_message_action_menu_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessageUrlPicker));
+    assert!(!state.is_message_action_context_active());
     assert_eq!(state.selected_message_url_index(), Some(0));
 
     assert_eq!(
@@ -506,8 +532,10 @@ fn direct_message_url_opens_url_picker_for_multiple_urls() {
             url: "https://two.example/path".to_owned(),
         })
     );
-    assert!(!state.is_message_url_picker_open());
-    assert!(!state.is_message_action_menu_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::MessageUrlPicker)
+    );
+    assert!(!state.is_message_action_context_active());
 }
 
 #[test]
@@ -686,7 +714,7 @@ fn single_select_poll_action_opens_picker_and_submits_one_answer() {
     );
     assert!(state.select_message_action_row(poll_index));
     assert_eq!(state.activate_selected_message_action(), None);
-    assert!(state.is_poll_vote_picker_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::PollVotePicker));
 
     state.move_poll_vote_picker_down();
     state.toggle_selected_poll_vote_answer();
@@ -771,7 +799,7 @@ fn multi_select_poll_action_opens_picker_and_submits_selected_answers() {
     );
     assert!(state.select_message_action_row(poll_index));
     assert_eq!(state.activate_selected_message_action(), None);
-    assert!(state.is_poll_vote_picker_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::PollVotePicker));
     assert_eq!(
         state.poll_vote_picker_items().map(|items| {
             items

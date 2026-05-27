@@ -13,7 +13,8 @@ use crate::discord::{
 };
 
 use super::super::{
-    CommandPickerEntry, DashboardState, EmojiPickerEntry, FocusPane, MentionPickerEntry,
+    ActiveModalPopupKind, CommandPickerEntry, DashboardState, EmojiPickerEntry, FocusPane,
+    MentionPickerEntry,
 };
 use super::completions::{
     ComposerEmojiImageCompletion, EmojiCompletion, MentionCompletion,
@@ -266,7 +267,7 @@ impl DashboardState {
         }
 
         self.open_emoji_reaction_picker();
-        if !self.is_emoji_reaction_picker_open() {
+        if !self.is_active_modal_popup(ActiveModalPopupKind::EmojiReactionPicker) {
             return false;
         }
 

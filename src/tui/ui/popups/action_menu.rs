@@ -47,7 +47,7 @@ fn leader_popup_area(area: Rect, lines: &[Line<'_>]) -> Rect {
 
 fn leader_popup_title(state: &DashboardState) -> String {
     if state.is_leader_action_mode() {
-        if state.is_message_action_menu_open() {
+        if state.is_message_action_context_active() {
             return "Message Actions".to_owned();
         }
         if state.is_guild_leader_action_active() {
@@ -129,7 +129,7 @@ fn leader_line_width(line: &Line<'_>) -> usize {
 }
 
 fn leader_action_lines(state: &DashboardState) -> Vec<Line<'static>> {
-    if state.is_message_action_menu_open() {
+    if state.is_message_action_context_active() {
         let actions = state.selected_message_action_items();
         return leader_action_label_lines(
             actions
@@ -333,7 +333,9 @@ pub(in crate::tui::ui) fn render_message_action_menu(
     area: Rect,
     state: &DashboardState,
 ) {
-    if !state.is_message_action_menu_open() || state.is_leader_action_mode() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::MessageActionMenu)
+        || state.is_leader_action_mode()
+    {
         return;
     }
 

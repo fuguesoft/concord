@@ -23,9 +23,10 @@ use super::{
         lay_out_reaction_chips_with_custom_emoji_images, reaction_line_spans, wrap_text_lines,
     },
     state::{
-        AttachmentViewerItem, ChannelSwitcherItem, ChannelThreadItem, DashboardState,
-        DisplayOptionItem, EmojiReactionItem, FORUM_POST_CARD_HEIGHT, FocusPane, MessageActionItem,
-        MessageUrlItem, PollVotePickerItem, discord_color, presence_color, presence_marker,
+        ActiveModalPopupKind, AttachmentViewerItem, ChannelSwitcherItem, ChannelThreadItem,
+        DashboardState, DisplayOptionItem, EmojiReactionItem, FORUM_POST_CARD_HEIGHT, FocusPane,
+        MessageActionItem, MessageUrlItem, PollVotePickerItem, discord_color, presence_color,
+        presence_marker,
     },
 };
 use crate::discord::{
@@ -143,7 +144,7 @@ pub fn sync_view_heights(area: Rect, state: &mut DashboardState) {
         state.is_pane_visible(FocusPane::Members),
     ));
     state.set_reaction_users_popup_view_height(reaction_users_visible_line_count(areas.messages));
-    if state.is_user_profile_popup_open() {
+    if state.is_active_modal_popup(ActiveModalPopupKind::UserProfile) {
         // The popup body shrinks when the avatar slot is in use, so use
         // the same has-avatar predicate the renderer uses to keep the
         // total-line / view-height pair consistent with what gets drawn.
@@ -157,7 +158,7 @@ pub fn sync_view_heights(area: Rect, state: &mut DashboardState) {
         state.set_user_profile_popup_view_height(text_height as usize);
         state.set_user_profile_popup_total_lines(total_lines);
     }
-    if state.is_keymap_popup_open() {
+    if state.is_active_modal_popup(ActiveModalPopupKind::KeymapHelp) {
         let inner = keymap_popup_text_area(areas.messages);
         let total_lines = keymap_popup_total_lines(state);
         state.set_keymap_popup_view_height(inner.height as usize);

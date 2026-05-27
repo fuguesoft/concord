@@ -145,13 +145,21 @@ fn keymap_configured_d_prefix_overrides_message_delete_default() {
     assert_eq!(command, None);
     assert!(state.is_leader_active());
     assert_eq!(state.leader_keymap_title(), "d");
-    assert!(!state.is_message_delete_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 
     handle_key(&mut state, char_key('d'));
 
     assert!(!state.is_leader_active());
     assert!(state.voice_options().self_deaf);
-    assert!(!state.is_message_delete_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(
+            crate::tui::state::ActiveModalPopupKind::MessageDeleteConfirmation
+        )
+    );
 }
 
 #[test]
@@ -231,7 +239,7 @@ fn keymap_can_execute_leader_and_options_actions() {
 
     handle_key(&mut state, char_key(' '));
     handle_key(&mut state, char_key(' '));
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
 
     state.close_channel_switcher();
     handle_key(&mut state, char_key(' '));
@@ -263,7 +271,7 @@ fn keymap_leader_ctrl_w_opens_channel_switcher() {
     );
     handle_key(&mut state, ctrl_key('w'));
 
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
 }
 
 #[test]
@@ -278,13 +286,13 @@ fn keymap_direct_ctrl_w_opens_channel_switcher_and_replaces_leader_default() {
     });
 
     handle_key(&mut state, ctrl_key('w'));
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
 
     state.close_channel_switcher();
     handle_key(&mut state, char_key(' '));
     assert!(state.is_leader_active());
     handle_key(&mut state, char_key(' '));
-    assert!(!state.is_channel_switcher_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
 }
 
 #[test]
@@ -315,7 +323,7 @@ fn keymap_non_leader_prefix_opens_which_key_then_executes() {
     );
 
     handle_key(&mut state, char_key('f'));
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
 }
 
 #[test]
@@ -469,7 +477,7 @@ fn configured_direct_keymap_can_override_dashboard_shortcut() {
 
     handle_key(&mut state, char_key('q'));
 
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
     assert!(!state.should_quit());
 }
 
@@ -486,15 +494,19 @@ fn configured_quit_key_replaces_default_q() {
 
     handle_key(&mut state, char_key('q'));
     assert!(!state.should_quit());
-    assert!(!state.is_quit_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::QuitConfirmation)
+    );
 
     handle_key(&mut state, char_key('x'));
     assert!(!state.should_quit());
-    assert!(state.is_quit_confirmation_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::QuitConfirmation));
 
     handle_key(&mut state, key(KeyCode::Esc));
     assert!(!state.should_quit());
-    assert!(!state.is_quit_confirmation_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::QuitConfirmation)
+    );
 
     handle_key(&mut state, char_key('x'));
     handle_key(&mut state, key(KeyCode::Enter));
@@ -648,7 +660,10 @@ fn leader_server_actions_leave_opens_confirmation_then_leaves() {
     handle_key(&mut state, char_key('l'));
 
     assert!(!state.is_leader_active());
-    assert!(state.is_guild_leave_confirmation_open());
+    assert!(
+        state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::GuildLeaveConfirmation)
+    );
 
     let command = handle_key(&mut state, char_key('y'));
 
@@ -762,14 +777,14 @@ fn leader_leader_switcher_filters_and_opens_selected_channel() {
     handle_key(&mut state, char_key(' '));
     handle_key(&mut state, char_key(' '));
     assert!(!state.is_leader_active());
-    assert!(state.is_channel_switcher_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
 
     for ch in "rand".chars() {
         handle_key(&mut state, char_key(ch));
     }
     let command = handle_key(&mut state, key(KeyCode::Enter));
 
-    assert!(!state.is_channel_switcher_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::ChannelSwitcher));
     assert_eq!(state.selected_channel_id(), Some(Id::new(12)));
     assert_eq!(
         command,
@@ -907,13 +922,13 @@ fn enter_opens_message_action_menu_and_space_opens_leader() {
 
     handle_key(&mut state, key(KeyCode::Enter));
 
-    assert!(state.is_message_action_menu_open());
+    assert!(state.is_message_action_context_active());
     state.close_message_action_menu();
 
     handle_key(&mut state, char_key(' '));
 
     assert!(state.is_leader_active());
-    assert!(!state.is_message_action_menu_open());
+    assert!(!state.is_message_action_context_active());
 }
 
 #[test]
@@ -983,7 +998,7 @@ fn leader_a_opens_message_actions_from_message_pane() {
     handle_key(&mut state, char_key('a'));
 
     assert!(state.is_leader_action_mode());
-    assert!(state.is_message_action_menu_open());
+    assert!(state.is_message_action_context_active());
     assert!(!state.is_channel_leader_action_active());
 }
 
@@ -1031,6 +1046,6 @@ fn leader_a_p_opens_member_profile() {
             guild_id: Some(Id::new(1)),
         })
     );
-    assert!(state.is_user_profile_popup_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::UserProfile));
     assert!(!state.is_leader_active());
 }

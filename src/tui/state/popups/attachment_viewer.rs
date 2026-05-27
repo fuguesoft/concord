@@ -3,15 +3,12 @@ use crate::discord::{
     ids::{Id, marker::MessageMarker},
 };
 
-use super::scroll::clamp_selected_index;
-use super::{AttachmentViewerItem, DashboardState};
-use crate::tui::state::popups::{AttachmentViewerState, AttachmentViewerZoom};
+use super::super::{AttachmentViewerItem, DashboardState};
+use crate::tui::state::popups::{
+    ActiveModalPopupKind, AttachmentViewerState, AttachmentViewerZoom, ModalPopup,
+};
 
 impl DashboardState {
-    pub fn is_attachment_viewer_open(&self) -> bool {
-        self.popups.attachment_viewer.is_some()
-    }
-
     pub fn open_attachment_viewer_for_selected_message(&mut self) -> bool {
         let Some(message) = self.selected_message_state() else {
             return false;
@@ -20,57 +17,57 @@ impl DashboardState {
             return false;
         }
 
-        self.popups.attachment_viewer = Some(AttachmentViewerState {
+        self.popups.modal = Some(ModalPopup::AttachmentViewer(AttachmentViewerState {
             message_id: message.id,
-            selected: 0,
+            selection: Default::default(),
             download_message: None,
             zoom: AttachmentViewerZoom::default(),
-        });
+        }));
         true
     }
 
     pub fn close_attachment_viewer(&mut self) {
-        self.popups.attachment_viewer = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::AttachmentViewer) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn attachment_viewer_zoom(&self) -> AttachmentViewerZoom {
         self.popups
-            .attachment_viewer
-            .as_ref()
+            .attachment_viewer()
             .map(|viewer| viewer.zoom)
             .unwrap_or_default()
     }
 
     pub fn toggle_attachment_viewer_fullscreen(&mut self) {
-        if let Some(viewer) = &mut self.popups.attachment_viewer {
+        if let Some(viewer) = self.popups.attachment_viewer_mut() {
             viewer.zoom = viewer.zoom.toggle_fullscreen();
         }
     }
 
     pub fn zoom_attachment_viewer_in(&mut self) {
-        if let Some(viewer) = &mut self.popups.attachment_viewer {
+        if let Some(viewer) = self.popups.attachment_viewer_mut() {
             viewer.zoom = viewer.zoom.zoom_in();
         }
     }
 
     pub fn zoom_attachment_viewer_out(&mut self) {
-        if let Some(viewer) = &mut self.popups.attachment_viewer {
+        if let Some(viewer) = self.popups.attachment_viewer_mut() {
             viewer.zoom = viewer.zoom.zoom_out();
         }
     }
 
     pub fn move_attachment_viewer_previous(&mut self) {
-        if let Some(viewer) = &mut self.popups.attachment_viewer {
-            viewer.selected = viewer.selected.saturating_sub(1);
+        if let Some(viewer) = self.popups.attachment_viewer_mut() {
+            viewer.selection.move_up();
         }
     }
 
     pub fn move_attachment_viewer_next(&mut self) {
         let Some((message_id, selected)) = self
             .popups
-            .attachment_viewer
-            .as_ref()
-            .map(|viewer| (viewer.message_id, viewer.selected))
+            .attachment_viewer()
+            .map(|viewer| (viewer.message_id, viewer.selection.selected()))
         else {
             return;
         };
@@ -79,15 +76,17 @@ impl DashboardState {
             self.close_attachment_viewer();
             return;
         }
-        if let Some(viewer) = &mut self.popups.attachment_viewer {
-            viewer.selected = selected.saturating_add(1).min(count.saturating_sub(1));
+        if let Some(viewer) = self.popups.attachment_viewer_mut() {
+            viewer
+                .selection
+                .select(selected.saturating_add(1).min(count.saturating_sub(1)));
         }
     }
 
     pub fn selected_attachment_viewer_item(&self) -> Option<AttachmentViewerItem> {
-        let viewer = self.popups.attachment_viewer.as_ref()?;
+        let viewer = self.popups.attachment_viewer()?;
         let attachments = self.attachment_viewer_attachments(viewer.message_id)?;
-        let selected = clamp_selected_index(viewer.selected, attachments.len());
+        let selected = viewer.selection.selected_for_len(attachments.len());
         let attachment = attachments.get(selected)?;
         Some(AttachmentViewerItem {
             index: selected.saturating_add(1),
@@ -102,9 +101,9 @@ impl DashboardState {
     pub(in crate::tui) fn selected_attachment_viewer_preview(
         &self,
     ) -> Option<(Id<MessageMarker>, usize, InlinePreviewInfo<'_>)> {
-        let viewer = self.popups.attachment_viewer.as_ref()?;
+        let viewer = self.popups.attachment_viewer()?;
         let attachments = self.attachment_viewer_attachments(viewer.message_id)?;
-        let selected = clamp_selected_index(viewer.selected, attachments.len());
+        let selected = viewer.selection.selected_for_len(attachments.len());
         let attachment = *attachments.get(selected)?;
         let preview = attachment.inline_preview_info()?;
         Some((viewer.message_id, selected, preview))
@@ -112,13 +111,12 @@ impl DashboardState {
 
     pub fn attachment_viewer_download_message(&self) -> Option<&str> {
         self.popups
-            .attachment_viewer
-            .as_ref()
+            .attachment_viewer()
             .and_then(|viewer| viewer.download_message.as_deref())
     }
 
     pub fn record_attachment_viewer_download_completed(&mut self, path: &str) {
-        if let Some(viewer) = &mut self.popups.attachment_viewer {
+        if let Some(viewer) = self.popups.attachment_viewer_mut() {
             viewer.download_message = Some(format!("Downloaded to {path}"));
         }
     }
@@ -126,7 +124,7 @@ impl DashboardState {
     pub fn download_selected_attachment_viewer_attachment(&mut self) -> Option<AppCommand> {
         let item = self.selected_attachment_viewer_item()?;
         let url = item.url?;
-        if let Some(viewer) = &mut self.popups.attachment_viewer {
+        if let Some(viewer) = self.popups.attachment_viewer_mut() {
             viewer.download_message = Some("Downloading attachment...".to_owned());
         }
         Some(AppCommand::DownloadAttachment {

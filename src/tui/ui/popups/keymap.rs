@@ -6,7 +6,7 @@ pub(in crate::tui::ui) fn render_keymap_help_popup(
     area: Rect,
     state: &DashboardState,
 ) {
-    if !state.is_keymap_help_popup_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::KeymapHelp) {
         return;
     }
 
@@ -61,7 +61,7 @@ pub(in crate::tui::ui) fn keymap_popup_text_area(area: Rect) -> Rect {
 }
 
 pub(in crate::tui::ui) fn keymap_popup_total_lines(state: &DashboardState) -> usize {
-    if state.is_keymap_help_popup_open() {
+    if state.is_active_modal_popup(ActiveModalPopupKind::KeymapHelp) {
         keymap_help_popup_lines(state.keymap_binding_summaries()).len()
     } else {
         0

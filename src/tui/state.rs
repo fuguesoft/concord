@@ -8,8 +8,6 @@ use crate::discord::{
 };
 use crate::logging;
 
-mod attachment_viewer;
-mod channel_switcher;
 mod channels;
 mod composer;
 mod dashboard;
@@ -19,7 +17,6 @@ mod emoji;
 mod guilds;
 mod layout_cache;
 mod member_grouping;
-mod message_actions;
 mod message_layout;
 mod message_render;
 mod message_viewport;
@@ -27,10 +24,8 @@ mod model;
 mod navigation;
 mod options;
 mod pane_filter;
-mod polls;
 mod popups;
 mod presentation;
-mod reactions;
 mod request_tracking;
 mod runtime_state;
 mod scroll;
@@ -47,7 +42,7 @@ use message_viewport::{MessageViewportState, ThreadReturnTarget};
 use navigation::{ActiveGuildScope, FolderKey, NavigationState};
 use options::OptionsUiState;
 use pane_filter::PaneFilterState;
-use popups::PopupUiState;
+use popups::{ModalPopup, PopupUiState};
 use request_tracking::RequestTrackingState;
 use runtime_state::{RuntimeUiState, ToastMessage, VoiceConnectionUiState};
 use scroll::clamp_selected_index;
@@ -66,6 +61,7 @@ pub use model::{
 };
 pub use model::{ChannelActionKind, GuildActionKind, MemberActionKind, MessageUrlItem};
 pub use options::DisplayOptionItem;
+pub(in crate::tui) use popups::ActiveModalPopupKind;
 pub use popups::{
     AttachmentViewerZoom, EmojiReactionPickerState, MessageActionMenuState, MessageUrlPickerState,
     PollVotePickerState, ReactionUsersPopupState,
@@ -214,13 +210,11 @@ impl DashboardState {
                 message_id,
                 reactions,
             } => {
-                self.popups.reaction_users_popup = Some(ReactionUsersPopupState {
-                    channel_id: *channel_id,
-                    message_id: *message_id,
-                    reactions: reactions.clone(),
-                    scroll: 0,
-                    view_height: 0,
-                });
+                self.popups.modal = Some(ModalPopup::ReactionUsers(ReactionUsersPopupState::new(
+                    *channel_id,
+                    *message_id,
+                    reactions.clone(),
+                )));
             }
             AppEvent::MessageHistoryLoadFailed { .. } => {}
             AppEvent::ForumPostsLoaded {
@@ -246,7 +240,7 @@ impl DashboardState {
                 guild_id,
                 message,
             } => {
-                if let Some(popup) = self.popups.user_profile_popup.as_mut()
+                if let Some(popup) = self.popups.user_profile_popup_mut()
                     && popup.user_id == *user_id
                     && popup.guild_id == *guild_id
                 {

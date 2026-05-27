@@ -7,7 +7,7 @@ pub(in crate::tui::ui) fn render_user_profile_popup(
     avatar: Option<AvatarImage>,
     emoji_images: &[EmojiImage<'_>],
 ) {
-    if !state.is_user_profile_popup_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::UserProfile) {
         return;
     }
 

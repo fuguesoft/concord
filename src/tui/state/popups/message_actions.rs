@@ -2,12 +2,12 @@ use crate::discord::{EmbedInfo, MessageState, ReactionEmoji};
 use crate::tui::format::detected_urls;
 use crate::tui::keybindings::KeyChord;
 
-use super::scroll::{clamp_selected_index, move_index_down, move_index_up};
-use super::{
+use super::super::{
     DashboardState, FocusPane, MessageActionItem, MessageActionKind, MessageActionMenuState,
     MessageUrlItem, MessageUrlPickerState, popups,
 };
 use crate::discord::AppCommand;
+use crate::tui::state::popups::{ActiveModalPopupKind, LeaderActionState, ModalPopup};
 
 impl DashboardState {
     pub fn activate_selected_message_pane_item(&mut self) -> Option<AppCommand> {
@@ -18,34 +18,37 @@ impl DashboardState {
         None
     }
 
-    pub fn is_message_action_menu_open(&self) -> bool {
-        self.popups.message_action_menu.is_some()
-    }
-
     pub fn open_selected_message_actions(&mut self) {
         if self.navigation.focus == FocusPane::Messages && self.selected_message_state().is_some() {
-            self.popups.message_action_menu = Some(MessageActionMenuState::default());
+            self.popups.modal = Some(ModalPopup::MessageActionMenu(
+                MessageActionMenuState::default(),
+            ));
         }
     }
 
     pub fn close_message_action_menu(&mut self) {
-        self.popups.message_action_menu = None;
-    }
-
-    pub fn close_or_back_message_action_menu(&mut self) {
-        self.close_message_action_menu();
+        if matches!(
+            self.popups.modal,
+            Some(ModalPopup::MessageActionMenu(_))
+                | Some(ModalPopup::Leader(super::LeaderPopupState {
+                    action: Some(LeaderActionState::Message(_)),
+                    ..
+                }))
+        ) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn move_message_action_down(&mut self) {
         let actions_len = self.selected_message_action_items().len();
-        if let Some(menu) = &mut self.popups.message_action_menu {
-            move_index_down(&mut menu.selected, actions_len);
+        if let Some(menu) = self.popups.message_action_menu_mut() {
+            menu.selection.move_down(actions_len);
         }
     }
 
     pub fn move_message_action_up(&mut self) {
-        if let Some(menu) = &mut self.popups.message_action_menu {
-            move_index_up(&mut menu.selected);
+        if let Some(menu) = self.popups.message_action_menu_mut() {
+            menu.selection.move_up();
         }
     }
 
@@ -53,8 +56,8 @@ impl DashboardState {
         if row >= self.selected_message_action_items().len() {
             return false;
         }
-        if let Some(menu) = &mut self.popups.message_action_menu {
-            menu.selected = row;
+        if let Some(menu) = self.popups.message_action_menu_mut() {
+            menu.selection.select(row);
             return true;
         }
         false
@@ -134,17 +137,14 @@ impl DashboardState {
     }
 
     pub fn selected_message_action_index(&self) -> Option<usize> {
-        self.popups.message_action_menu.as_ref().map(|menu| {
-            clamp_selected_index(menu.selected, self.selected_message_action_items().len())
+        self.popups.message_action_menu().map(|menu| {
+            menu.selection
+                .selected_for_len(self.selected_message_action_items().len())
         })
     }
 
-    pub fn is_message_url_picker_open(&self) -> bool {
-        self.popups.message_url_picker.as_ref().is_some()
-    }
-
     pub fn selected_message_url_items(&self) -> Vec<MessageUrlItem> {
-        if let Some(picker) = &self.popups.message_url_picker {
+        if let Some(picker) = self.popups.message_url_picker() {
             return picker.items.clone();
         }
         self.selected_message_state()
@@ -154,31 +154,30 @@ impl DashboardState {
 
     pub fn selected_message_url_index(&self) -> Option<usize> {
         self.popups
-            .message_url_picker
-            .as_ref()
-            .map(|picker| clamp_selected_index(picker.selected, picker.items.len()))
+            .message_url_picker()
+            .map(|picker| picker.selection.selected_for_len(picker.items.len()))
     }
 
     pub fn move_message_url_picker_down(&mut self) {
-        if let Some(picker) = &mut self.popups.message_url_picker {
-            move_index_down(&mut picker.selected, picker.items.len());
+        if let Some(picker) = self.popups.message_url_picker_mut() {
+            picker.selection.move_down(picker.items.len());
         }
     }
 
     pub fn move_message_url_picker_up(&mut self) {
-        if let Some(picker) = &mut self.popups.message_url_picker {
-            move_index_up(&mut picker.selected);
+        if let Some(picker) = self.popups.message_url_picker_mut() {
+            picker.selection.move_up();
         }
     }
 
     pub fn select_message_url_row(&mut self, row: usize) -> bool {
-        let Some(picker) = &mut self.popups.message_url_picker else {
+        let Some(picker) = self.popups.message_url_picker_mut() else {
             return false;
         };
         if row >= picker.items.len() {
             return false;
         }
-        picker.selected = row;
+        picker.selection.select(row);
         true
     }
 
@@ -288,6 +287,7 @@ impl DashboardState {
         if !action.enabled {
             return None;
         }
+        self.close_message_action_menu();
         self.run_message_action_kind(kind)
     }
 
@@ -380,11 +380,16 @@ impl DashboardState {
     }
 
     pub fn close_message_url_picker(&mut self) {
-        self.popups.message_url_picker = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::MessageUrlPicker) {
+            self.popups.clear_modal();
+        }
     }
 
     fn open_message_url_picker(&mut self, items: Vec<MessageUrlItem>) {
-        self.popups.message_url_picker = Some(MessageUrlPickerState { selected: 0, items });
+        self.popups.modal = Some(ModalPopup::MessageUrlPicker(MessageUrlPickerState {
+            selection: Default::default(),
+            items,
+        }));
     }
 
     pub fn direct_copy_selected_message_content(&mut self) {
@@ -452,24 +457,24 @@ impl DashboardState {
         if !self.can_delete_message(message) {
             return;
         }
-        self.popups.message_delete_confirmation = Some(popups::MessageDeleteConfirmationState {
-            channel_id: message.channel_id,
-            message_id: message.id,
-            author: message.author.clone(),
-            content: message.content.clone(),
-        });
-    }
-
-    pub fn is_message_delete_confirmation_open(&self) -> bool {
-        self.popups.message_delete_confirmation.is_some()
+        self.popups.modal = Some(ModalPopup::MessageDeleteConfirmation(
+            popups::MessageDeleteConfirmationState {
+                channel_id: message.channel_id,
+                message_id: message.id,
+                author: message.author.clone(),
+                content: message.content.clone(),
+            },
+        ));
     }
 
     pub fn close_message_delete_confirmation(&mut self) {
-        self.popups.message_delete_confirmation = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::MessageDeleteConfirmation) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn confirm_message_delete(&mut self) -> Option<AppCommand> {
-        let confirmation = self.popups.message_delete_confirmation.take()?;
+        let confirmation = self.popups.take_message_delete_confirmation()?;
         Some(AppCommand::DeleteMessage {
             channel_id: confirmation.channel_id,
             message_id: confirmation.message_id,
@@ -477,7 +482,7 @@ impl DashboardState {
     }
 
     pub fn message_delete_confirmation_lines(&self) -> Option<(String, Option<String>)> {
-        let confirmation = self.popups.message_delete_confirmation.as_ref()?;
+        let confirmation = self.popups.message_delete_confirmation()?;
         Some((confirmation.author.clone(), confirmation.content.clone()))
     }
 
@@ -488,25 +493,25 @@ impl DashboardState {
         if !self.can_pin_messages_for_message(message) {
             return;
         }
-        self.popups.message_pin_confirmation = Some(popups::MessagePinConfirmationState {
-            channel_id: message.channel_id,
-            message_id: message.id,
-            pinned,
-            author: message.author.clone(),
-            content: message.content.clone(),
-        });
-    }
-
-    pub fn is_message_pin_confirmation_open(&self) -> bool {
-        self.popups.message_pin_confirmation.is_some()
+        self.popups.modal = Some(ModalPopup::MessagePinConfirmation(
+            popups::MessagePinConfirmationState {
+                channel_id: message.channel_id,
+                message_id: message.id,
+                pinned,
+                author: message.author.clone(),
+                content: message.content.clone(),
+            },
+        ));
     }
 
     pub fn close_message_pin_confirmation(&mut self) {
-        self.popups.message_pin_confirmation = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::MessagePinConfirmation) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn confirm_message_pin(&mut self) -> Option<AppCommand> {
-        let confirmation = self.popups.message_pin_confirmation.take()?;
+        let confirmation = self.popups.take_message_pin_confirmation()?;
         Some(AppCommand::SetMessagePinned {
             channel_id: confirmation.channel_id,
             message_id: confirmation.message_id,
@@ -515,7 +520,7 @@ impl DashboardState {
     }
 
     pub fn message_pin_confirmation_lines(&self) -> Option<(bool, String, Option<String>)> {
-        let confirmation = self.popups.message_pin_confirmation.as_ref()?;
+        let confirmation = self.popups.message_pin_confirmation()?;
         Some((
             confirmation.pinned,
             confirmation.author.clone(),

@@ -5,7 +5,7 @@ pub(in crate::tui::ui) fn render_message_url_picker(
     area: Rect,
     state: &DashboardState,
 ) {
-    if !state.is_message_url_picker_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::MessageUrlPicker) {
         return;
     }
 

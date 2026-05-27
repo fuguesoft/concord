@@ -1,30 +1,23 @@
 use crate::discord::AppCommand;
 use crate::discord::ids::{Id, marker::GuildMarker};
-use crate::tui::fuzzy::FuzzyScore;
+use crate::tui::fuzzy::{FuzzyScore, fuzzy_text_score};
 
-use super::super::fuzzy::fuzzy_text_score;
-use super::emoji::{
+use super::super::emoji::{
     custom_emoji_reaction_item, is_quick_unicode_emoji, quick_unicode_emoji_reaction_items,
     remaining_unicode_emoji_reaction_items,
 };
-use super::scroll::{clamp_selected_index, move_index_down, move_index_up};
-use super::{DashboardState, EmojiReactionItem, EmojiReactionPickerState, ReactionUsersPopupState};
+use super::super::{
+    DashboardState, EmojiReactionItem, EmojiReactionPickerState, ReactionUsersPopupState,
+};
+use crate::tui::state::popups::{ActiveModalPopupKind, ModalPopup};
 
 impl DashboardState {
-    pub fn is_emoji_reaction_picker_open(&self) -> bool {
-        self.popups.emoji_reaction_picker.is_some()
-    }
-
-    pub fn is_reaction_users_popup_open(&self) -> bool {
-        self.popups.reaction_users_popup.is_some()
-    }
-
     pub fn reaction_users_popup(&self) -> Option<&ReactionUsersPopupState> {
-        self.popups.reaction_users_popup.as_ref()
+        self.popups.reaction_users_popup()
     }
 
     pub fn emoji_reaction_items(&self) -> Vec<EmojiReactionItem> {
-        if let Some(picker) = &self.popups.emoji_reaction_picker {
+        if let Some(picker) = self.popups.emoji_reaction_picker() {
             return picker.items.clone();
         }
 
@@ -54,7 +47,7 @@ impl DashboardState {
     }
 
     pub fn filtered_emoji_reaction_items(&self) -> Vec<EmojiReactionItem> {
-        if let Some(picker) = &self.popups.emoji_reaction_picker {
+        if let Some(picker) = self.popups.emoji_reaction_picker() {
             return picker.filtered_items.clone();
         }
 
@@ -68,30 +61,26 @@ impl DashboardState {
 
     pub fn filtered_emoji_reaction_items_slice(&self) -> Option<&[EmojiReactionItem]> {
         self.popups
-            .emoji_reaction_picker
-            .as_ref()
+            .emoji_reaction_picker()
             .map(|picker| picker.filtered_items.as_slice())
     }
 
     pub fn emoji_reaction_filter(&self) -> Option<&str> {
         self.popups
-            .emoji_reaction_picker
-            .as_ref()
+            .emoji_reaction_picker()
             .and_then(|picker| picker.filter.as_deref())
     }
 
     pub fn existing_emoji_reactions(&self) -> &[crate::discord::ReactionEmoji] {
         self.popups
-            .emoji_reaction_picker
-            .as_ref()
+            .emoji_reaction_picker()
             .map(|picker| picker.existing_reactions.as_slice())
             .unwrap_or(&[])
     }
 
     pub fn own_emoji_reactions(&self) -> &[crate::discord::ReactionEmoji] {
         self.popups
-            .emoji_reaction_picker
-            .as_ref()
+            .emoji_reaction_picker()
             .map(|picker| picker.own_reactions.as_slice())
             .unwrap_or(&[])
     }
@@ -102,70 +91,59 @@ impl DashboardState {
 
     pub fn is_editing_emoji_reaction_filter(&self) -> bool {
         self.popups
-            .emoji_reaction_picker
-            .as_ref()
+            .emoji_reaction_picker()
             .is_some_and(|picker| picker.filter_editing)
     }
 
     pub fn close_emoji_reaction_picker(&mut self) {
-        self.popups.emoji_reaction_picker = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::EmojiReactionPicker) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn close_reaction_users_popup(&mut self) {
-        self.popups.reaction_users_popup = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::ReactionUsers) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn scroll_reaction_users_popup_down(&mut self) {
-        if let Some(popup) = &mut self.popups.reaction_users_popup {
-            popup.scroll = popup.scroll.saturating_add(1);
-            popup.clamp_scroll();
+        if let Some(popup) = self.popups.reaction_users_popup_mut() {
+            popup.scroll.scroll_down();
         }
     }
 
     pub fn scroll_reaction_users_popup_up(&mut self) {
-        if let Some(popup) = &mut self.popups.reaction_users_popup {
-            popup.scroll = popup.scroll.saturating_sub(1);
-        }
-    }
-
-    pub fn page_reaction_users_popup_down(&mut self) {
-        if let Some(popup) = &mut self.popups.reaction_users_popup {
-            popup.scroll = popup.scroll.saturating_add((popup.view_height / 2).max(1));
-            popup.clamp_scroll();
-        }
-    }
-
-    pub fn page_reaction_users_popup_up(&mut self) {
-        if let Some(popup) = &mut self.popups.reaction_users_popup {
-            popup.scroll = popup.scroll.saturating_sub((popup.view_height / 2).max(1));
+        if let Some(popup) = self.popups.reaction_users_popup_mut() {
+            popup.scroll.scroll_up();
         }
     }
 
     pub fn set_reaction_users_popup_view_height(&mut self, height: usize) {
-        if let Some(popup) = &mut self.popups.reaction_users_popup {
-            popup.view_height = height;
-            popup.clamp_scroll();
+        if let Some(popup) = self.popups.reaction_users_popup_mut() {
+            let total_lines = popup.data_line_count();
+            popup.scroll.set_view_height(height);
+            popup.scroll.set_total_lines(total_lines);
         }
     }
 
     pub fn move_emoji_reaction_down(&mut self) {
         let reactions_len = self.filtered_emoji_reaction_items().len();
-        if let Some(picker) = &mut self.popups.emoji_reaction_picker {
-            move_index_down(&mut picker.selected, reactions_len);
+        if let Some(picker) = self.popups.emoji_reaction_picker_mut() {
+            picker.selection.move_down(reactions_len);
         }
     }
 
     pub fn move_emoji_reaction_up(&mut self) {
-        if let Some(picker) = &mut self.popups.emoji_reaction_picker {
-            move_index_up(&mut picker.selected);
+        if let Some(picker) = self.popups.emoji_reaction_picker_mut() {
+            picker.selection.move_up();
         }
     }
 
     pub fn selected_emoji_reaction_index_for_len(&self, len: usize) -> Option<usize> {
         self.popups
-            .emoji_reaction_picker
-            .as_ref()
-            .map(|picker| clamp_selected_index(picker.selected, len))
+            .emoji_reaction_picker()
+            .map(|picker| picker.selection.selected_for_len(len))
     }
 
     pub fn selected_emoji_reaction(&self) -> Option<EmojiReactionItem> {
@@ -175,7 +153,7 @@ impl DashboardState {
     }
 
     pub fn activate_selected_emoji_reaction(&mut self) -> Option<AppCommand> {
-        let picker = self.popups.emoji_reaction_picker.clone()?;
+        let picker = self.popups.emoji_reaction_picker().cloned()?;
         let reaction = self.selected_emoji_reaction()?;
         let selected_message = self.selected_message_state().filter(|message| {
             message.channel_id == picker.channel_id && message.id == picker.message_id
@@ -213,7 +191,7 @@ impl DashboardState {
 
     pub fn activate_emoji_reaction_shortcut(&mut self, shortcut: char) -> Option<AppCommand> {
         let shortcut = shortcut.to_ascii_lowercase();
-        let picker = self.popups.emoji_reaction_picker.as_ref()?;
+        let picker = self.popups.emoji_reaction_picker()?;
         let index = picker
             .filtered_items
             .iter()
@@ -225,44 +203,44 @@ impl DashboardState {
                     index,
                 ) == Some(shortcut)
             })?;
-        if let Some(picker) = &mut self.popups.emoji_reaction_picker {
-            picker.selected = index;
+        if let Some(picker) = self.popups.emoji_reaction_picker_mut() {
+            picker.selection.select(index);
         }
         self.activate_selected_emoji_reaction()
     }
 
     pub fn start_emoji_reaction_filter(&mut self) {
-        if let Some(picker) = &mut self.popups.emoji_reaction_picker {
+        if let Some(picker) = self.popups.emoji_reaction_picker_mut() {
             picker.filter = Some(String::new());
             picker.filter_editing = true;
             picker.filtered_items = picker.items.clone();
-            picker.selected = 0;
+            picker.selection.select(0);
         }
     }
 
     pub fn commit_emoji_reaction_filter(&mut self) {
-        if let Some(picker) = &mut self.popups.emoji_reaction_picker {
+        if let Some(picker) = self.popups.emoji_reaction_picker_mut() {
             picker.filter_editing = false;
         }
     }
 
     pub fn push_emoji_reaction_filter_char(&mut self, value: char) {
-        if let Some(picker) = &mut self.popups.emoji_reaction_picker
+        if let Some(picker) = self.popups.emoji_reaction_picker_mut()
             && let Some(filter) = &mut picker.filter
         {
             filter.push(value);
             picker.filtered_items = filter_emoji_reaction_items_from_slice(&picker.items, filter);
-            picker.selected = 0;
+            picker.selection.select(0);
         }
     }
 
     pub fn pop_emoji_reaction_filter_char(&mut self) {
-        if let Some(picker) = &mut self.popups.emoji_reaction_picker
+        if let Some(picker) = self.popups.emoji_reaction_picker_mut()
             && let Some(filter) = &mut picker.filter
         {
             filter.pop();
             picker.filtered_items = filter_emoji_reaction_items_from_slice(&picker.items, filter);
-            picker.selected = 0;
+            picker.selection.select(0);
         }
     }
 
@@ -300,8 +278,8 @@ impl DashboardState {
                     })
                     .collect()
             };
-            self.popups.emoji_reaction_picker = Some(EmojiReactionPickerState {
-                selected: 0,
+            self.popups.modal = Some(ModalPopup::EmojiReactionPicker(EmojiReactionPickerState {
+                selection: Default::default(),
                 filter: None,
                 filter_editing: false,
                 filtered_items: items.clone(),
@@ -311,14 +289,13 @@ impl DashboardState {
                 guild_id,
                 channel_id: message.channel_id,
                 message_id: message.id,
-            });
+            }));
         }
     }
 
     fn picker_guild_id(&self) -> Option<Id<GuildMarker>> {
         self.popups
-            .emoji_reaction_picker
-            .as_ref()
+            .emoji_reaction_picker()
             .and_then(|picker| picker.guild_id)
             .or_else(|| {
                 self.selected_message_state()

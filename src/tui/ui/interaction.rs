@@ -1,6 +1,6 @@
 use ratatui::layout::Rect;
 
-use super::super::state::{DashboardState, FocusPane};
+use super::super::state::{ActiveModalPopupKind, DashboardState, FocusPane};
 use super::{
     layout::{centered_rect, dashboard_areas, message_areas},
     panel_block, panel_block_owned,
@@ -83,7 +83,7 @@ fn channel_switcher_mouse_target(
     column: u16,
     row: u16,
 ) -> Option<MouseTarget> {
-    if !state.is_channel_switcher_open() {
+    if state.active_modal_popup_kind() != Some(ActiveModalPopupKind::ChannelSwitcher) {
         return None;
     }
     let popup = channel_switcher_popup_area(area);
@@ -111,25 +111,23 @@ fn popup_list_mouse_target(
     column: u16,
     row: u16,
 ) -> Option<MouseTarget> {
-    if state.is_message_url_picker_open() {
-        return popup_list_row_target(
+    match state.active_modal_popup_kind()? {
+        ActiveModalPopupKind::MessageUrlPicker => popup_list_row_target(
             message_url_picker_area(area, state),
             state.selected_message_url_items().len(),
             PopupListTarget::MessageUrl,
             column,
             row,
-        );
-    }
-    if state.is_message_action_menu_open() {
-        return popup_list_row_target(
+        ),
+        ActiveModalPopupKind::MessageActionMenu => popup_list_row_target(
             message_action_menu_area(area, state),
             state.selected_message_action_items().len(),
             PopupListTarget::MessageAction,
             column,
             row,
-        );
+        ),
+        _ => None,
     }
-    None
 }
 
 fn popup_list_row_target(

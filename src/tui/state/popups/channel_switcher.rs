@@ -10,20 +10,22 @@ use crate::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::super::fuzzy::fuzzy_text_score;
-use super::{ActiveGuildScope, DashboardState};
-use super::{
+use crate::tui::fuzzy::fuzzy_text_score;
+use crate::tui::keybindings::SelectionAction;
+
+use super::super::{
+    ActiveGuildScope, DashboardState,
     model::{ChannelBranch, ChannelSwitcherItem, GuildPaneEntry},
     presentation::{is_direct_message_channel, sort_channels, sort_direct_message_channels},
-    scroll::{clamp_selected_index, move_index_down, move_index_up},
 };
 use crate::discord::AppCommand;
+use crate::tui::state::popups::{ActiveModalPopupKind, ModalPopup, SelectablePopupState};
 
 #[derive(Debug)]
-pub(super) struct ChannelSwitcherState {
+pub(in crate::tui::state) struct ChannelSwitcherState {
     query: String,
     query_cursor_byte_index: usize,
-    selected: usize,
+    selection: SelectablePopupState,
     base_items: Vec<ChannelSwitcherItem>,
     query_items: Option<Vec<ChannelSwitcherItem>>,
 }
@@ -33,7 +35,7 @@ impl ChannelSwitcherState {
         Self {
             query: String::new(),
             query_cursor_byte_index: 0,
-            selected: 0,
+            selection: SelectablePopupState::default(),
             base_items,
             query_items: None,
         }
@@ -55,30 +57,27 @@ impl ChannelSwitcherState {
 }
 
 impl DashboardState {
-    pub fn is_channel_switcher_open(&self) -> bool {
-        self.popups.channel_switcher.is_some()
-    }
-
     pub fn open_channel_switcher(&mut self) {
-        self.close_all_action_contexts();
-        self.close_leader();
         let items = self.all_channel_switcher_items();
-        self.popups.channel_switcher = Some(ChannelSwitcherState::new(items));
+        self.popups.modal = Some(ModalPopup::ChannelSwitcher(ChannelSwitcherState::new(
+            items,
+        )));
     }
 
     pub fn close_channel_switcher(&mut self) {
-        self.popups.channel_switcher = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::ChannelSwitcher) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn channel_switcher_query(&self) -> Option<&str> {
         self.popups
-            .channel_switcher
-            .as_ref()
+            .channel_switcher()
             .map(|switcher| switcher.query.as_str())
     }
 
     pub fn channel_switcher_query_cursor_byte_index(&self) -> Option<usize> {
-        let switcher = self.popups.channel_switcher.as_ref()?;
+        let switcher = self.popups.channel_switcher()?;
         Some(clamp_cursor_index(
             &switcher.query,
             switcher.query_cursor_byte_index,
@@ -86,17 +85,13 @@ impl DashboardState {
     }
 
     pub fn selected_channel_switcher_index(&self) -> Option<usize> {
-        let switcher = self.popups.channel_switcher.as_ref()?;
-        Some(clamp_selected_index(
-            switcher.selected,
-            switcher.visible_len(),
-        ))
+        let switcher = self.popups.channel_switcher()?;
+        Some(switcher.selection.selected_for_len(switcher.visible_len()))
     }
 
     pub fn channel_switcher_items(&self) -> Vec<ChannelSwitcherItem> {
         self.popups
-            .channel_switcher
-            .as_ref()
+            .channel_switcher()
             .map(|switcher| switcher.visible_items().to_vec())
             .unwrap_or_default()
     }
@@ -104,44 +99,49 @@ impl DashboardState {
     pub fn move_channel_switcher_down(&mut self) {
         let len = self
             .popups
-            .channel_switcher
-            .as_ref()
+            .channel_switcher()
             .map(ChannelSwitcherState::visible_len)
             .unwrap_or_default();
-        if let Some(switcher) = self.popups.channel_switcher.as_mut() {
-            move_index_down(&mut switcher.selected, len);
+        if let Some(switcher) = self.popups.channel_switcher_mut() {
+            switcher.selection.move_down(len);
         }
     }
 
     pub fn move_channel_switcher_up(&mut self) {
-        if let Some(switcher) = self.popups.channel_switcher.as_mut() {
-            move_index_up(&mut switcher.selected);
+        if let Some(switcher) = self.popups.channel_switcher_mut() {
+            switcher.selection.move_up();
+        }
+    }
+
+    pub(super) fn page_channel_switcher_selection(&mut self, action: SelectionAction) {
+        if let Some(switcher) = self.popups.channel_switcher_mut() {
+            switcher.selection.page(switcher.visible_len(), action);
         }
     }
 
     pub fn select_channel_switcher_item(&mut self, row: usize) -> bool {
-        let Some(switcher) = self.popups.channel_switcher.as_mut() else {
+        let Some(switcher) = self.popups.channel_switcher_mut() else {
             return false;
         };
         if row >= switcher.visible_len() {
             return false;
         }
-        switcher.selected = row;
+        switcher.selection.select(row);
         true
     }
 
     pub fn push_channel_switcher_char(&mut self, value: char) {
-        if let Some(switcher) = self.popups.channel_switcher.as_mut() {
+        if let Some(switcher) = self.popups.channel_switcher_mut() {
             let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
             switcher.query.insert(cursor, value);
             switcher.query_cursor_byte_index = cursor + value.len_utf8();
-            switcher.selected = 0;
+            switcher.selection.select(0);
             switcher.refresh_query_items();
         }
     }
 
     pub fn pop_channel_switcher_char(&mut self) {
-        if let Some(switcher) = self.popups.channel_switcher.as_mut() {
+        if let Some(switcher) = self.popups.channel_switcher_mut() {
             let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
             if cursor == 0 {
                 return;
@@ -149,20 +149,20 @@ impl DashboardState {
             let start = previous_char_boundary(&switcher.query, cursor);
             switcher.query.replace_range(start..cursor, "");
             switcher.query_cursor_byte_index = start;
-            switcher.selected = 0;
+            switcher.selection.select(0);
             switcher.refresh_query_items();
         }
     }
 
     pub fn move_channel_switcher_query_cursor_left(&mut self) {
-        if let Some(switcher) = self.popups.channel_switcher.as_mut() {
+        if let Some(switcher) = self.popups.channel_switcher_mut() {
             let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
             switcher.query_cursor_byte_index = previous_char_boundary(&switcher.query, cursor);
         }
     }
 
     pub fn move_channel_switcher_query_cursor_right(&mut self) {
-        if let Some(switcher) = self.popups.channel_switcher.as_mut() {
+        if let Some(switcher) = self.popups.channel_switcher_mut() {
             let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
             switcher.query_cursor_byte_index = next_char_boundary(&switcher.query, cursor);
         }
@@ -170,8 +170,8 @@ impl DashboardState {
 
     pub fn activate_selected_channel_switcher_item(&mut self) -> Option<AppCommand> {
         let item = {
-            let switcher = self.popups.channel_switcher.as_ref()?;
-            let selected = clamp_selected_index(switcher.selected, switcher.visible_len());
+            let switcher = self.popups.channel_switcher()?;
+            let selected = switcher.selection.selected_for_len(switcher.visible_len());
             switcher.visible_items().get(selected)?.clone()
         };
 

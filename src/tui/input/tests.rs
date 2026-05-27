@@ -527,5 +527,7 @@ fn state_with_image_message() -> DashboardState {
 }
 fn open_emoji_picker(state: &mut DashboardState) {
     handle_key(state, char_key('r'));
-    assert!(state.is_emoji_reaction_picker_open());
+    assert!(
+        state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 }

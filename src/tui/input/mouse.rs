@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use crate::discord::AppCommand;
 
 use super::super::{
-    state::{DashboardState, FocusPane},
+    state::{ActiveModalPopupKind, DashboardState, FocusPane},
     ui,
 };
 
@@ -87,7 +87,7 @@ pub fn handle_mouse_event(
             // The user-profile popup absorbs clicks only inside its drawn
             // rectangle. Clicks outside the popup should still reach the
             // dashboard instead of making the whole screen inert.
-            if state.is_user_profile_popup_open()
+            if state.is_active_modal_popup(ActiveModalPopupKind::UserProfile)
                 && ui::user_profile_popup_contains(area, state, mouse.column, mouse.row)
             {
                 clicks.clear();
@@ -111,7 +111,7 @@ pub fn handle_mouse_event(
             }
             // Wheel events while the user-profile popup is open should scroll
             // the popup body, not the pane below it.
-            if state.is_user_profile_popup_open() {
+            if state.is_active_modal_popup(ActiveModalPopupKind::UserProfile) {
                 state.scroll_user_profile_popup_down();
                 return MouseOutcome::handled(None);
             }
@@ -119,7 +119,7 @@ pub fn handle_mouse_event(
             if let Some(pane) = pane {
                 state.focus_pane(pane);
             }
-            scroll_focused_pane_down(state);
+            state.scroll_focused_pane_viewport_down();
             MouseOutcome::handled(None)
         }
         MouseEventKind::ScrollUp => {
@@ -128,7 +128,7 @@ pub fn handle_mouse_event(
                 move_modal_up(state);
                 return MouseOutcome::handled(None);
             }
-            if state.is_user_profile_popup_open() {
+            if state.is_active_modal_popup(ActiveModalPopupKind::UserProfile) {
                 state.scroll_user_profile_popup_up();
                 return MouseOutcome::handled(None);
             }
@@ -136,7 +136,7 @@ pub fn handle_mouse_event(
             if let Some(pane) = pane {
                 state.focus_pane(pane);
             }
-            scroll_focused_pane_up(state);
+            state.scroll_focused_pane_viewport_up();
             MouseOutcome::handled(None)
         }
         MouseEventKind::Up(MouseButton::Left) => MouseOutcome::handled(None),
@@ -219,7 +219,7 @@ fn handle_left_click(
                 clicks.clear();
                 return MouseOutcome::handled(None);
             }
-            let command = if selected && clicks.record_left_click(target) {
+            let command = if clicks.record_left_click(target) {
                 activate_focused_target(state)
             } else {
                 None
@@ -230,18 +230,20 @@ fn handle_left_click(
 }
 
 fn move_modal_down(state: &mut DashboardState) {
-    if state.is_channel_switcher_open() {
-        state.move_channel_switcher_down();
-    } else {
-        move_popup_list_down(state);
+    match state.active_modal_popup_kind() {
+        Some(ActiveModalPopupKind::ChannelSwitcher) => state.move_channel_switcher_down(),
+        Some(ActiveModalPopupKind::MessageUrlPicker) => state.move_message_url_picker_down(),
+        Some(ActiveModalPopupKind::MessageActionMenu) => state.move_message_action_down(),
+        _ => {}
     }
 }
 
 fn move_modal_up(state: &mut DashboardState) {
-    if state.is_channel_switcher_open() {
-        state.move_channel_switcher_up();
-    } else {
-        move_popup_list_up(state);
+    match state.active_modal_popup_kind() {
+        Some(ActiveModalPopupKind::ChannelSwitcher) => state.move_channel_switcher_up(),
+        Some(ActiveModalPopupKind::MessageUrlPicker) => state.move_message_url_picker_up(),
+        Some(ActiveModalPopupKind::MessageActionMenu) => state.move_message_action_up(),
+        _ => {}
     }
 }
 
@@ -259,22 +261,6 @@ fn activate_popup_row(
     match target {
         ui::PopupListTarget::MessageAction => state.activate_selected_message_action(),
         ui::PopupListTarget::MessageUrl => state.activate_selected_message_url(),
-    }
-}
-
-fn move_popup_list_down(state: &mut DashboardState) {
-    if state.is_message_url_picker_open() {
-        state.move_message_url_picker_down();
-    } else if state.is_message_action_menu_open() {
-        state.move_message_action_down();
-    }
-}
-
-fn move_popup_list_up(state: &mut DashboardState) {
-    if state.is_message_url_picker_open() {
-        state.move_message_url_picker_up();
-    } else if state.is_message_action_menu_open() {
-        state.move_message_action_up();
     }
 }
 
@@ -308,23 +294,19 @@ fn activate_focused_target(state: &mut DashboardState) -> Option<AppCommand> {
 }
 
 fn ignores_dashboard_mouse(state: &DashboardState) -> bool {
-    state.is_debug_log_popup_open()
-        || state.is_reaction_users_popup_open()
-        || state.is_poll_vote_picker_open()
-        || state.is_emoji_reaction_picker_open()
-        || state.is_message_action_menu_open()
-        || state.is_message_url_picker_open()
-        || state.is_attachment_viewer_open()
-        || state.is_guild_leader_action_active()
+    matches!(
+        state.active_modal_popup_kind(),
+        Some(
+            ActiveModalPopupKind::DebugLog
+                | ActiveModalPopupKind::ReactionUsers
+                | ActiveModalPopupKind::PollVotePicker
+                | ActiveModalPopupKind::EmojiReactionPicker
+                | ActiveModalPopupKind::MessageActionMenu
+                | ActiveModalPopupKind::MessageUrlPicker
+                | ActiveModalPopupKind::AttachmentViewer
+                | ActiveModalPopupKind::ChannelSwitcher
+        )
+    ) || state.is_guild_leader_action_active()
         || state.is_channel_leader_action_active()
         || state.is_member_leader_action_active()
-        || state.is_channel_switcher_open()
-}
-
-fn scroll_focused_pane_down(state: &mut DashboardState) {
-    state.scroll_focused_pane_viewport_down();
-}
-
-fn scroll_focused_pane_up(state: &mut DashboardState) {
-    state.scroll_focused_pane_viewport_up();
 }

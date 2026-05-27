@@ -5,7 +5,7 @@ pub(in crate::tui::ui) fn render_options_popup(
     area: Rect,
     state: &DashboardState,
 ) {
-    if !state.is_options_popup_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::Options) {
         return;
     }
 

@@ -1,39 +1,36 @@
 use crate::discord::AppCommand;
 
-use super::scroll::{clamp_selected_index, move_index_down, move_index_up};
-use super::{DashboardState, PollVotePickerItem, PollVotePickerState};
+use super::super::{DashboardState, PollVotePickerItem, PollVotePickerState};
+use crate::tui::state::popups::{ActiveModalPopupKind, ModalPopup};
 
 impl DashboardState {
-    pub fn is_poll_vote_picker_open(&self) -> bool {
-        self.popups.poll_vote_picker.is_some()
-    }
-
     pub fn poll_vote_picker_items(&self) -> Option<&[PollVotePickerItem]> {
         self.popups
-            .poll_vote_picker
-            .as_ref()
+            .poll_vote_picker()
             .map(PollVotePickerState::answers)
     }
 
     pub fn close_poll_vote_picker(&mut self) {
-        self.popups.poll_vote_picker = None;
+        if self.is_active_modal_popup(ActiveModalPopupKind::PollVotePicker) {
+            self.popups.clear_modal();
+        }
     }
 
     pub fn move_poll_vote_picker_down(&mut self) {
-        if let Some(picker) = &mut self.popups.poll_vote_picker {
-            move_index_down(&mut picker.selected, picker.answers.len());
+        if let Some(picker) = self.popups.poll_vote_picker_mut() {
+            picker.selection.move_down(picker.answers.len());
         }
     }
 
     pub fn move_poll_vote_picker_up(&mut self) {
-        if let Some(picker) = &mut self.popups.poll_vote_picker {
-            move_index_up(&mut picker.selected);
+        if let Some(picker) = self.popups.poll_vote_picker_mut() {
+            picker.selection.move_up();
         }
     }
 
     pub fn toggle_selected_poll_vote_answer(&mut self) {
-        if let Some(picker) = &mut self.popups.poll_vote_picker {
-            let index = clamp_selected_index(picker.selected, picker.answers.len());
+        if let Some(picker) = self.popups.poll_vote_picker_mut() {
+            let index = picker.selection.selected_for_len(picker.answers.len());
             toggle_poll_answer_selection(picker, index);
         }
     }
@@ -41,7 +38,7 @@ impl DashboardState {
     pub fn toggle_poll_vote_answer_shortcut(&mut self, shortcut: char) {
         let shortcut = shortcut.to_ascii_lowercase();
         let key_bindings = self.options.key_bindings().clone();
-        let Some(picker) = &mut self.popups.poll_vote_picker else {
+        let Some(picker) = self.popups.poll_vote_picker_mut() else {
             return;
         };
         let Some(index) = picker
@@ -52,26 +49,24 @@ impl DashboardState {
         else {
             return;
         };
-        picker.selected = index;
+        picker.selection.select(index);
         toggle_poll_answer_selection(picker, index);
     }
 
     pub fn selected_poll_vote_picker_index(&self) -> Option<usize> {
         self.popups
-            .poll_vote_picker
-            .as_ref()
-            .map(|picker| clamp_selected_index(picker.selected, picker.answers.len()))
+            .poll_vote_picker()
+            .map(|picker| picker.selection.selected_for_len(picker.answers.len()))
     }
 
     pub fn activate_poll_vote_picker(&mut self) -> Option<AppCommand> {
-        let picker = self.popups.poll_vote_picker.clone()?;
+        let picker = self.popups.take_poll_vote_picker()?;
         let answer_ids = picker
             .answers
             .iter()
             .filter(|answer| answer.selected)
             .map(|answer| answer.answer_id)
             .collect::<Vec<_>>();
-        self.close_poll_vote_picker();
         Some(AppCommand::VotePoll {
             channel_id: picker.channel_id,
             message_id: picker.message_id,
@@ -83,8 +78,8 @@ impl DashboardState {
         if let Some(message) = self.selected_message_state()
             && let Some(poll) = &message.poll
         {
-            self.popups.poll_vote_picker = Some(PollVotePickerState {
-                selected: 0,
+            self.popups.modal = Some(ModalPopup::PollVotePicker(PollVotePickerState {
+                selection: Default::default(),
                 allow_multiselect: poll.allow_multiselect,
                 channel_id: message.channel_id,
                 message_id: message.id,
@@ -99,7 +94,7 @@ impl DashboardState {
                         })
                         .collect(),
                 ),
-            });
+            }));
         }
     }
 }

@@ -6,289 +6,24 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use crate::discord::AppCommand;
 use crate::discord::ids::{
     Id,
     marker::{GuildMarker, UserMarker},
 };
-use crate::discord::{
-    ActivityInfo, ChannelInfo, MessageInfo, MessageState, PresenceStatus, UserProfileInfo,
-};
-use crate::tui::keybindings::KeyChord;
+use crate::discord::{ActivityInfo, AppCommand, ChannelInfo, MessageInfo, MessageState};
 
-use super::{ActiveGuildScope, DashboardState};
-use super::{
-    member_grouping::{
-        MemberEntry, MemberGroup, channel_recipient_group, flatten_member_groups,
-        guild_member_groups,
-    },
-    model::{FocusPane, MemberActionItem, MemberActionKind},
-    popups::{MemberLeaderActionState, UserProfilePopupState},
-    scroll::clamp_selected_index,
+use super::DashboardState;
+use super::member_grouping::{
+    MemberEntry, MemberGroup, channel_recipient_group, flatten_member_groups, guild_member_groups,
 };
-
-/// Holds `popup.scroll` inside `[0, max(0, total_lines - view_height)]` so
-/// the renderer never asks for rows past the laid-out content. Re-applied
-/// on every render hook because mutual-server data and bio paragraphs can
-/// change between frames as the profile loads.
-fn clamp_user_profile_popup_scroll(popup: &mut UserProfilePopupState) {
-    let max_scroll = popup.total_lines.saturating_sub(popup.view_height);
-    popup.scroll = popup.scroll.min(max_scroll);
-}
 
 const MAX_GUILD_MEMBER_BY_ID_REQUEST_USERS: usize = 100;
 
 impl DashboardState {
-    pub fn is_user_profile_popup_open(&self) -> bool {
-        self.popups.user_profile_popup.is_some()
-    }
-
-    pub fn is_member_leader_action_active(&self) -> bool {
-        self.popups.member_leader_action.is_some()
-    }
-
-    /// Direct shortcut from the member pane: open the profile popup for the
-    /// currently selected member without going through Leader Actions.
-    pub fn show_selected_member_profile(&mut self) -> Option<AppCommand> {
-        if self.navigation.focus != FocusPane::Members {
-            return None;
-        }
-        let entries = self.flattened_members();
-        let entry = entries.get(self.selected_member())?;
-        let user_id = entry.user_id();
-        let guild_id = match self.navigation.active_guild {
-            ActiveGuildScope::Guild(guild_id) => Some(guild_id),
-            ActiveGuildScope::DirectMessages | ActiveGuildScope::Unset => None,
-        };
-        self.open_user_profile_popup(user_id, guild_id)
-    }
-
-    pub fn open_selected_member_actions(&mut self) {
-        if self.navigation.focus != FocusPane::Members {
-            return;
-        }
-        let entries = self.flattened_members();
-        let Some(entry) = entries.get(self.selected_member()) else {
-            return;
-        };
-        let user_id = entry.user_id();
-        // For DM/group-DM panes there is no guild context. Pass it through so
-        // the profile fetch can omit `guild_id` and skip the guild_member
-        // section gracefully.
-        let guild_id = match self.navigation.active_guild {
-            ActiveGuildScope::Guild(guild_id) => Some(guild_id),
-            ActiveGuildScope::DirectMessages | ActiveGuildScope::Unset => None,
-        };
-        self.popups.member_leader_action = Some(MemberLeaderActionState {
-            user_id,
-            guild_id,
-            selected: 0,
-        });
-    }
-
-    pub fn close_member_leader_action(&mut self) {
-        self.popups.member_leader_action = None;
-    }
-
-    pub fn selected_member_action_items(&self) -> Vec<MemberActionItem> {
-        if self.popups.member_leader_action.is_none() {
-            return Vec::new();
-        }
-        vec![MemberActionItem {
-            kind: MemberActionKind::ShowProfile,
-            label: "Show profile".to_owned(),
-            enabled: true,
-        }]
-    }
-
-    pub fn select_member_action_row(&mut self, row: usize) -> bool {
-        if row >= self.selected_member_action_items().len() {
-            return false;
-        }
-        if let Some(action) = self.popups.member_leader_action.as_mut() {
-            action.selected = row;
-            return true;
-        }
-        false
-    }
-
-    pub fn activate_selected_member_action(&mut self) -> Option<AppCommand> {
-        let action = self.popups.member_leader_action.clone()?;
-        let items = self.selected_member_action_items();
-        let item = items
-            .get(clamp_selected_index(action.selected, items.len()))?
-            .clone();
-        if !item.enabled {
-            return None;
-        }
-        match item.kind {
-            MemberActionKind::ShowProfile => {
-                self.close_member_leader_action();
-                self.open_user_profile_popup(action.user_id, action.guild_id)
-            }
-        }
-    }
-
-    pub fn activate_member_action_shortcut(&mut self, shortcut: KeyChord) -> Option<AppCommand> {
-        let actions = self.selected_member_action_items();
-        let index = self.options.key_bindings().matching_action_shortcut_index(
-            &actions,
-            shortcut,
-            |key_bindings, actions, index| key_bindings.member_action_shortcuts(actions, index),
-            |action| action.enabled,
-        )?;
-        self.select_member_action_row(index);
-        self.activate_selected_member_action()
-    }
-
-    /// Opens the profile popup for `user_id`. The returned command is a profile
-    /// open intent. Backend request lifecycle decides whether profile or note
-    /// data is already cached or in flight.
-    pub fn open_user_profile_popup(
-        &mut self,
-        user_id: Id<UserMarker>,
-        guild_id: Option<Id<GuildMarker>>,
-    ) -> Option<AppCommand> {
-        self.popups.user_profile_popup = Some(UserProfilePopupState {
-            user_id,
-            guild_id,
-            load_error: None,
-            scroll: 0,
-            view_height: 0,
-            total_lines: 0,
-        });
-        Some(AppCommand::LoadUserProfile { user_id, guild_id })
-    }
-
-    pub fn close_user_profile_popup(&mut self) {
-        self.popups.user_profile_popup = None;
-    }
-
-    pub fn user_profile_popup_data(&self) -> Option<&UserProfileInfo> {
-        let popup = self.popups.user_profile_popup.as_ref()?;
-        self.discord
-            .cache
-            .user_profile(popup.user_id, popup.guild_id)
-    }
-
-    pub fn user_profile_popup_load_error(&self) -> Option<&str> {
-        self.popups
-            .user_profile_popup
-            .as_ref()
-            .and_then(|popup| popup.load_error.as_deref())
-    }
-
-    pub fn user_profile_popup_status(&self) -> PresenceStatus {
-        let Some(popup) = self.popups.user_profile_popup.as_ref() else {
-            return PresenceStatus::Unknown;
-        };
-
-        if let Some(guild_id) = popup.guild_id
-            && let Some(status) = self
-                .discord
-                .members_for_guild(guild_id)
-                .into_iter()
-                .find(|member| member.user_id == popup.user_id)
-                .map(|member| member.status)
-        {
-            return status;
-        }
-
-        if let Some(guild_id) = popup.guild_id
-            && let Some(status) = self
-                .discord
-                .user_presence_for_guild(Some(guild_id), popup.user_id)
-        {
-            return status;
-        }
-
-        let recipient_status = self
-            .discord
-            .channels_for_guild(None)
-            .into_iter()
-            .flat_map(|channel| channel.recipients.iter())
-            .find(|recipient| recipient.user_id == popup.user_id)
-            .map(|recipient| recipient.status);
-
-        recipient_status
-            .filter(|status| *status != PresenceStatus::Unknown)
-            .or_else(|| self.discord.cache.user_presence(popup.user_id))
-            .unwrap_or(PresenceStatus::Unknown)
-    }
-
-    /// URL of the avatar image to render into the open profile popup. None
-    /// when the popup is closed, the profile has not loaded yet, or the user
-    /// has no avatar attachment.
-    pub fn user_profile_popup_avatar_url(&self) -> Option<&str> {
-        self.user_profile_popup_data()?.avatar_url.as_deref()
-    }
-
-    pub fn user_profile_popup_activities(&self) -> &[ActivityInfo] {
-        let Some(popup) = self.popups.user_profile_popup.as_ref() else {
-            return &[];
-        };
-        self.discord
-            .cache
-            .user_activities_for_guild(popup.guild_id, popup.user_id)
-    }
-
     pub fn user_activities(&self, user_id: Id<UserMarker>) -> &[ActivityInfo] {
         self.discord
             .cache
             .user_activities_for_guild(self.selected_guild_id(), user_id)
-    }
-
-    /// Top-of-viewport row for the popup body. Used by the renderer.
-    pub fn user_profile_popup_scroll(&self) -> usize {
-        self.popups
-            .user_profile_popup
-            .as_ref()
-            .map(|popup| popup.scroll)
-            .unwrap_or(0)
-    }
-
-    /// Renderer hook: passes the latest viewport height back so scroll
-    /// methods can clamp without snapping past the last visible row.
-    pub fn set_user_profile_popup_view_height(&mut self, height: usize) {
-        if let Some(popup) = self.popups.user_profile_popup.as_mut() {
-            popup.view_height = height;
-            clamp_user_profile_popup_scroll(popup);
-        }
-    }
-
-    /// Renderer hook: stash the laid-out content height so scroll
-    /// clamping is a constant-time check instead of recomputing layout.
-    pub fn set_user_profile_popup_total_lines(&mut self, total_lines: usize) {
-        if let Some(popup) = self.popups.user_profile_popup.as_mut() {
-            popup.total_lines = total_lines;
-            clamp_user_profile_popup_scroll(popup);
-        }
-    }
-
-    pub fn scroll_user_profile_popup_down(&mut self) {
-        if let Some(popup) = self.popups.user_profile_popup.as_mut() {
-            popup.scroll = popup.scroll.saturating_add(1);
-            clamp_user_profile_popup_scroll(popup);
-        }
-    }
-
-    pub fn scroll_user_profile_popup_up(&mut self) {
-        if let Some(popup) = self.popups.user_profile_popup.as_mut() {
-            popup.scroll = popup.scroll.saturating_sub(1);
-        }
-    }
-
-    pub fn page_user_profile_popup_down(&mut self) {
-        if let Some(popup) = self.popups.user_profile_popup.as_mut() {
-            popup.scroll = popup.scroll.saturating_add((popup.view_height / 2).max(1));
-            clamp_user_profile_popup_scroll(popup);
-        }
-    }
-
-    pub fn page_user_profile_popup_up(&mut self) {
-        if let Some(popup) = self.popups.user_profile_popup.as_mut() {
-            popup.scroll = popup.scroll.saturating_sub((popup.view_height / 2).max(1));
-        }
     }
 
     pub fn members_grouped(&self) -> Vec<MemberGroup<'_>> {
@@ -462,16 +197,14 @@ impl DashboardState {
     /// profile cache when the guild member entry only has fallback data.
     pub fn member_display_name(&self, entry: MemberEntry<'_>) -> String {
         let name = entry.display_name();
-        if entry.has_fallback_identity() {
-            if let Some(guild_id) = self.selected_guild_id() {
-                if let Some(profile) = self
-                    .discord
-                    .cache
-                    .user_profile(entry.user_id(), Some(guild_id))
-                {
-                    return profile.display_name().to_owned();
-                }
-            }
+        if entry.has_fallback_identity()
+            && let Some(guild_id) = self.selected_guild_id()
+            && let Some(profile) = self
+                .discord
+                .cache
+                .user_profile(entry.user_id(), Some(guild_id))
+        {
+            return profile.display_name().to_owned();
         }
         name
     }

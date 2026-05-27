@@ -7,7 +7,7 @@ pub(in crate::tui::ui) fn render_channel_switcher_popup(
     area: Rect,
     state: &DashboardState,
 ) {
-    if !state.is_channel_switcher_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::ChannelSwitcher) {
         return;
     }
 
@@ -49,7 +49,7 @@ pub(in crate::tui::ui) fn channel_switcher_item_index_at(
     column: u16,
     row: u16,
 ) -> Option<usize> {
-    if !state.is_channel_switcher_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::ChannelSwitcher) {
         return None;
     }
     let popup = channel_switcher_popup_area(area);
@@ -78,7 +78,7 @@ pub(in crate::tui::ui) fn channel_switcher_cursor_position(
     area: Rect,
     state: &DashboardState,
 ) -> Option<Position> {
-    if !state.is_channel_switcher_open() {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::ChannelSwitcher) {
         return None;
     }
     let query = state.channel_switcher_query().unwrap_or_default();

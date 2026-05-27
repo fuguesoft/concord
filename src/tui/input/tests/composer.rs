@@ -116,7 +116,9 @@ fn plus_colon_in_composer_opens_reaction_picker_for_selected_message() {
 
     assert!(state.is_composing());
     assert_eq!(state.composer_input(), "");
-    assert!(state.is_emoji_reaction_picker_open());
+    assert!(
+        state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
     assert_eq!(state.emoji_reaction_filter(), None);
     assert!(!state.is_editing_emoji_reaction_filter());
 
@@ -132,7 +134,9 @@ fn plus_colon_in_composer_opens_reaction_picker_for_selected_message() {
     );
     assert!(state.is_composing());
     assert_eq!(state.composer_input(), "");
-    assert!(!state.is_emoji_reaction_picker_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 }
 
 #[test]
@@ -148,7 +152,9 @@ fn plus_colon_without_selected_message_stays_composer_text() {
 
     assert!(state.is_composing());
     assert_eq!(state.composer_input(), "+:");
-    assert!(!state.is_emoji_reaction_picker_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 }
 
 #[test]
@@ -707,7 +713,7 @@ fn direct_reply_shortcut_opens_composer() {
     let command = handle_key(&mut state, char_key('R'));
 
     assert_eq!(command, None);
-    assert!(!state.is_message_action_menu_open());
+    assert!(!state.is_message_action_context_active());
     assert!(state.is_composing());
     assert_eq!(state.composer_input(), "");
 
@@ -777,8 +783,10 @@ fn direct_reaction_shortcut_opens_emoji_picker() {
     let command = handle_key(&mut state, char_key('r'));
 
     assert_eq!(command, None);
-    assert!(!state.is_message_action_menu_open());
-    assert!(state.is_emoji_reaction_picker_open());
+    assert!(!state.is_message_action_context_active());
+    assert!(
+        state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
     assert_eq!(
         state.selected_emoji_reaction().map(|item| item.emoji),
         Some(ReactionEmoji::Unicode("👍".to_owned()))
@@ -804,7 +812,9 @@ fn emoji_picker_selection_returns_reaction_command() {
             emoji: ReactionEmoji::Unicode("🎉".to_owned()),
         })
     );
-    assert!(!state.is_emoji_reaction_picker_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 }
 
 #[test]
@@ -828,7 +838,9 @@ fn emoji_picker_selection_removes_existing_own_reaction() {
             emoji: ReactionEmoji::Unicode("👍".to_owned()),
         })
     );
-    assert!(!state.is_emoji_reaction_picker_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 }
 
 #[test]
@@ -847,7 +859,9 @@ fn emoji_picker_number_shortcut_selects_reaction() {
             emoji: ReactionEmoji::Unicode("❤️".to_owned()),
         })
     );
-    assert!(!state.is_emoji_reaction_picker_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
 }
 
 #[test]
@@ -943,7 +957,9 @@ fn emoji_picker_enter_locks_filter_before_activating_reaction() {
     let command = handle_key(&mut state, key(KeyCode::Enter));
 
     assert_eq!(command, None);
-    assert!(state.is_emoji_reaction_picker_open());
+    assert!(
+        state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
     assert_eq!(state.emoji_reaction_filter(), Some("heart"));
     assert!(!state.is_editing_emoji_reaction_filter());
 
@@ -1037,7 +1053,9 @@ fn escape_closes_emoji_picker_without_reacting() {
     let command = handle_key(&mut state, key(KeyCode::Esc));
 
     assert_eq!(command, None);
-    assert!(!state.is_emoji_reaction_picker_open());
+    assert!(
+        !state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::EmojiReactionPicker)
+    );
     assert_eq!(state.selected_message(), 1);
 }
 
@@ -1057,7 +1075,7 @@ fn multiselect_poll_picker_toggles_and_submits_selected_answers() {
 
     let command = handle_key(&mut state, key(KeyCode::Enter));
     assert_eq!(command, None);
-    assert!(state.is_poll_vote_picker_open());
+    assert!(state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::PollVotePicker));
 
     handle_key(&mut state, key(KeyCode::Down));
     handle_key(&mut state, char_key(' '));
@@ -1071,5 +1089,5 @@ fn multiselect_poll_picker_toggles_and_submits_selected_answers() {
             answer_ids: vec![1, 2],
         })
     );
-    assert!(!state.is_poll_vote_picker_open());
+    assert!(!state.is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::PollVotePicker));
 }

@@ -2,6 +2,26 @@ use super::*;
 use crate::discord::AppCommand;
 
 #[test]
+fn leader_message_action_copy_closes_action_popup() {
+    let mut state = state_with_messages(1);
+    state.focus_pane(FocusPane::Messages);
+    state.open_leader_actions_for_focused_target();
+
+    assert!(state.is_leader_action_mode());
+    assert!(state.is_message_action_context_active());
+
+    let command = state.activate_message_action_kind(MessageActionKind::CopyContent);
+
+    assert_eq!(command, None);
+    assert!(!state.is_leader_active());
+    assert!(!state.is_message_action_context_active());
+    assert_eq!(
+        state.take_copy_message_content_request(),
+        Some("msg 1".to_owned())
+    );
+}
+
+#[test]
 fn channel_leader_action_lists_threads_for_selected_channel() {
     let mut state = state_with_thread_created_message();
     state.focus_pane(FocusPane::Channels);
@@ -221,7 +241,10 @@ fn current_guild_leave_confirmation_dispatches_leave_command() {
 
     state.open_current_guild_leave_confirmation();
 
-    assert!(state.is_guild_leave_confirmation_open());
+    assert!(
+        state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::GuildLeaveConfirmation)
+    );
     assert_eq!(
         state.guild_leave_confirmation_name(),
         Some("guild 1".to_owned())
@@ -233,7 +256,10 @@ fn current_guild_leave_confirmation_dispatches_leave_command() {
             label: "guild 1".to_owned(),
         })
     );
-    assert!(!state.is_guild_leave_confirmation_open());
+    assert!(
+        !state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::GuildLeaveConfirmation)
+    );
 }
 
 #[test]
@@ -244,7 +270,10 @@ fn focused_guild_cursor_leave_confirmation_does_not_require_active_guild() {
 
     state.open_current_guild_leave_confirmation();
 
-    assert!(state.is_guild_leave_confirmation_open());
+    assert!(
+        state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::GuildLeaveConfirmation)
+    );
     assert_eq!(
         state.confirm_guild_leave(),
         Some(AppCommand::LeaveGuild {
@@ -265,7 +294,10 @@ fn guild_leader_action_leave_server_opens_confirmation() {
     assert_eq!(state.activate_selected_guild_action(), None);
 
     assert!(!state.is_guild_leader_action_active());
-    assert!(state.is_guild_leave_confirmation_open());
+    assert!(
+        state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::GuildLeaveConfirmation)
+    );
     assert_eq!(
         state.confirm_guild_leave(),
         Some(AppCommand::LeaveGuild {
@@ -283,7 +315,10 @@ fn direct_messages_do_not_open_guild_leave_confirmation() {
 
     state.open_current_guild_leave_confirmation();
 
-    assert!(!state.is_guild_leave_confirmation_open());
+    assert!(
+        !state
+            .is_active_modal_popup(crate::tui::state::ActiveModalPopupKind::GuildLeaveConfirmation)
+    );
 }
 
 #[test]

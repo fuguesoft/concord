@@ -9,10 +9,8 @@ use crate::discord::{ChannelState, ChannelUnreadState, TypingUserState, VoicePar
 use super::{ActiveGuildScope, DashboardState, ThreadReturnTarget};
 use super::{
     model::{
-        ChannelActionItem, ChannelActionKind, ChannelBranch, ChannelPaneEntry, ChannelThreadItem,
-        FORUM_POST_CARD_HEIGHT, FocusPane, MUTE_ACTION_DURATIONS,
+        ChannelBranch, ChannelPaneEntry, ChannelThreadItem, FORUM_POST_CARD_HEIGHT, FocusPane,
     },
-    popups::ChannelLeaderActionState,
     presentation::{is_direct_message_channel, sort_channels, sort_direct_message_channels},
     scroll::{
         clamp_list_viewport, clamp_selected_index, pane_content_height, toggle_collapsed_key,
@@ -20,154 +18,10 @@ use super::{
 };
 use crate::discord::AppCommand;
 use crate::tui::fuzzy::{FuzzyMatchQuality, FuzzyScore, fuzzy_name_match_score};
-use crate::tui::keybindings::KeyChord;
 
 const RECENT_CHANNEL_LIMIT: usize = 10;
 
 impl DashboardState {
-    pub fn open_selected_channel_actions(&mut self) {
-        if self.navigation.focus != FocusPane::Channels {
-            return;
-        }
-        let Some(channel_id) = self.selected_channel_action_target_id() else {
-            return;
-        };
-        self.open_channel_actions(channel_id);
-    }
-
-    fn open_channel_actions(&mut self, channel_id: Id<ChannelMarker>) {
-        let Some(channel) = self.discord.cache.channel(channel_id) else {
-            return;
-        };
-        if channel.is_thread() {
-            return;
-        }
-        self.popups.channel_leader_action = Some(ChannelLeaderActionState::Actions {
-            channel_id,
-            selected: 0,
-        });
-    }
-
-    pub fn close_channel_leader_action(&mut self) {
-        self.popups.channel_leader_action = None;
-    }
-
-    pub fn back_channel_leader_action(&mut self) -> bool {
-        match self.popups.channel_leader_action.as_ref() {
-            Some(
-                ChannelLeaderActionState::Threads { channel_id, .. }
-                | ChannelLeaderActionState::MuteDuration { channel_id, .. },
-            ) => {
-                let channel_id = *channel_id;
-                self.popups.channel_leader_action = Some(ChannelLeaderActionState::Actions {
-                    channel_id,
-                    selected: 0,
-                });
-                true
-            }
-            _ => false,
-        }
-    }
-
-    pub fn selected_channel_action_items(&self) -> Vec<ChannelActionItem> {
-        let channel_id = match self.popups.channel_leader_action.as_ref() {
-            Some(ChannelLeaderActionState::Actions { channel_id, .. }) => *channel_id,
-            _ => return Vec::new(),
-        };
-        let Some(channel) = self.discord.cache.channel(channel_id) else {
-            return Vec::new();
-        };
-        let thread_count = self
-            .channels()
-            .into_iter()
-            .filter(|c| c.is_thread() && c.parent_id == Some(channel_id))
-            .count();
-        let thread_label = if thread_count == 0 {
-            "Show threads (none)".to_owned()
-        } else {
-            format!("Show threads ({thread_count})")
-        };
-        // The Mark-as-read entry stays enabled only when the channel still
-        // has either an active unread divider/banner or pending unread
-        // bookkeeping, so it doesn't show as a no-op on already-read
-        // channels.
-        let active_channel_has_unread_snapshot = self.navigation.active_channel_id
-            == Some(channel_id)
-            && (self.messages.unread_divider_last_acked_id.is_some()
-                || self.messages.pending_unread_anchor_scroll);
-        let mark_as_read_enabled = active_channel_has_unread_snapshot
-            || self.discord.cache.channel_ack_target(channel_id).is_some()
-            || (channel.is_forum()
-                && !self
-                    .discord
-                    .cache
-                    .forum_child_ack_targets(channel_id)
-                    .is_empty());
-        let joined_here = channel.is_voice()
-            && channel.guild_id.is_some_and(|guild_id| {
-                self.runtime.voice_connection.is_some_and(|voice| {
-                    voice.guild_id == guild_id && voice.channel_id == Some(channel_id)
-                })
-            });
-        let can_join_voice = channel.is_voice()
-            && !joined_here
-            && self.discord.cache.can_connect_voice_channel(channel);
-        let mute_label = match (
-            self.discord.cache.channel_notification_muted(channel_id),
-            channel.is_category(),
-        ) {
-            (true, true) => "Unmute category",
-            (true, false) => "Unmute channel",
-            (false, true) => "Mute category",
-            (false, false) => "Mute channel",
-        };
-
-        vec![
-            ChannelActionItem {
-                kind: ChannelActionKind::JoinVoice,
-                label: "Join voice".to_owned(),
-                enabled: can_join_voice,
-            },
-            ChannelActionItem {
-                kind: ChannelActionKind::LeaveVoice,
-                label: "Leave voice".to_owned(),
-                enabled: joined_here,
-            },
-            ChannelActionItem {
-                kind: ChannelActionKind::LoadPinnedMessages,
-                label: "Show pinned messages".to_owned(),
-                enabled: !channel.is_category(),
-            },
-            ChannelActionItem {
-                kind: ChannelActionKind::ShowThreads,
-                label: thread_label,
-                enabled: thread_count > 0,
-            },
-            ChannelActionItem {
-                kind: ChannelActionKind::MarkAsRead,
-                label: "Mark as read".to_owned(),
-                enabled: mark_as_read_enabled,
-            },
-            ChannelActionItem {
-                kind: ChannelActionKind::ToggleMute,
-                label: mute_label.to_owned(),
-                enabled: true,
-            },
-        ]
-    }
-
-    pub fn selected_channel_mute_duration_items(&self) -> &'static [super::MuteActionDurationItem] {
-        &MUTE_ACTION_DURATIONS
-    }
-
-    pub fn channel_action_thread_items(&self) -> Vec<ChannelThreadItem> {
-        let channel_id = match self.popups.channel_leader_action.as_ref() {
-            Some(ChannelLeaderActionState::Threads { channel_id, .. }) => *channel_id,
-            _ => return Vec::new(),
-        };
-        self.child_thread_items(channel_id)
-    }
-
     pub fn selected_forum_post_items(&self) -> Vec<ChannelThreadItem> {
         let Some(channel) = self
             .selected_channel_state()
@@ -343,7 +197,10 @@ impl DashboardState {
         })
     }
 
-    fn child_thread_items(&self, channel_id: Id<ChannelMarker>) -> Vec<ChannelThreadItem> {
+    pub(super) fn child_thread_items(
+        &self,
+        channel_id: Id<ChannelMarker>,
+    ) -> Vec<ChannelThreadItem> {
         let mut threads: Vec<&ChannelState> = self
             .channels()
             .into_iter()
@@ -530,211 +387,6 @@ impl DashboardState {
             .len()
             .saturating_add(list.archived_post_ids.len());
         visible_bottom >= len || selected_bottom >= len
-    }
-
-    pub fn selected_channel_action_index(&self) -> Option<usize> {
-        match self.popups.channel_leader_action.as_ref()? {
-            ChannelLeaderActionState::Actions { selected, .. } => Some(clamp_selected_index(
-                *selected,
-                self.selected_channel_action_items().len(),
-            )),
-            ChannelLeaderActionState::MuteDuration { selected, .. } => Some(clamp_selected_index(
-                *selected,
-                self.selected_channel_mute_duration_items().len(),
-            )),
-            ChannelLeaderActionState::Threads { selected, .. } => Some(clamp_selected_index(
-                *selected,
-                self.channel_action_thread_items().len(),
-            )),
-        }
-    }
-
-    pub fn select_channel_action_row(&mut self, row: usize) -> bool {
-        let len = match self.popups.channel_leader_action.as_ref() {
-            Some(ChannelLeaderActionState::Actions { .. }) => {
-                self.selected_channel_action_items().len()
-            }
-            Some(ChannelLeaderActionState::MuteDuration { .. }) => {
-                self.selected_channel_mute_duration_items().len()
-            }
-            Some(ChannelLeaderActionState::Threads { .. }) => {
-                self.channel_action_thread_items().len()
-            }
-            None => return false,
-        };
-        if row >= len {
-            return false;
-        }
-        if let Some(action) = self.popups.channel_leader_action.as_mut() {
-            let selected = match action {
-                ChannelLeaderActionState::Actions { selected, .. }
-                | ChannelLeaderActionState::MuteDuration { selected, .. }
-                | ChannelLeaderActionState::Threads { selected, .. } => selected,
-            };
-            *selected = row;
-            return true;
-        }
-        false
-    }
-
-    pub fn activate_selected_channel_action(&mut self) -> Option<AppCommand> {
-        let action = self.popups.channel_leader_action.clone()?;
-        match action {
-            ChannelLeaderActionState::Actions {
-                channel_id,
-                selected,
-            } => {
-                let items = self.selected_channel_action_items();
-                let item = items
-                    .get(clamp_selected_index(selected, items.len()))?
-                    .clone();
-                if !item.enabled {
-                    return None;
-                }
-                match item.kind {
-                    ChannelActionKind::JoinVoice => {
-                        self.close_channel_leader_action();
-                        self.discord
-                            .cache
-                            .channel(channel_id)
-                            .and_then(|channel| channel.guild_id)
-                            .map(|guild_id| AppCommand::JoinVoiceChannel {
-                                guild_id,
-                                channel_id,
-                                self_mute: self.options.voice_options.self_mute,
-                                self_deaf: self.options.voice_options.self_deaf,
-                                allow_microphone_transmit: self
-                                    .options
-                                    .voice_options
-                                    .allow_microphone_transmit,
-                                microphone_sensitivity: self
-                                    .options
-                                    .voice_options
-                                    .microphone_sensitivity,
-                                microphone_volume: self.options.voice_options.microphone_volume,
-                                voice_output_volume: self.options.voice_options.voice_output_volume,
-                            })
-                    }
-                    ChannelActionKind::LeaveVoice => {
-                        self.close_channel_leader_action();
-                        self.discord
-                            .cache
-                            .channel(channel_id)
-                            .and_then(|channel| channel.guild_id)
-                            .map(|guild_id| AppCommand::LeaveVoiceChannel {
-                                guild_id,
-                                self_mute: self.options.voice_options.self_mute,
-                                self_deaf: self.options.voice_options.self_deaf,
-                            })
-                    }
-                    ChannelActionKind::LoadPinnedMessages => {
-                        self.enter_pinned_message_view(channel_id);
-                        self.close_channel_leader_action();
-                        None
-                    }
-                    ChannelActionKind::ShowThreads => {
-                        self.popups.channel_leader_action =
-                            Some(ChannelLeaderActionState::Threads {
-                                channel_id,
-                                selected: 0,
-                            });
-                        None
-                    }
-                    ChannelActionKind::MarkAsRead => {
-                        self.mark_channel_as_read(channel_id);
-                        self.close_channel_leader_action();
-                        // `mark_channel_as_read` already queued the
-                        // `AckChannel` command via `queue_channel_ack`, so
-                        // there's nothing extra for the dispatch loop here.
-                        None
-                    }
-                    ChannelActionKind::ToggleMute => {
-                        if self.discord.cache.channel_notification_muted(channel_id) {
-                            self.close_channel_leader_action();
-                            self.toggle_channel_mute(channel_id, None)
-                        } else {
-                            self.popups.channel_leader_action =
-                                Some(ChannelLeaderActionState::MuteDuration {
-                                    channel_id,
-                                    selected: 0,
-                                });
-                            None
-                        }
-                    }
-                }
-            }
-            ChannelLeaderActionState::MuteDuration {
-                channel_id,
-                selected,
-            } => {
-                let item =
-                    self.selected_channel_mute_duration_items()
-                        .get(clamp_selected_index(
-                            selected,
-                            self.selected_channel_mute_duration_items().len(),
-                        ))?;
-                self.close_channel_leader_action();
-                self.toggle_channel_mute(channel_id, Some(item.duration))
-            }
-            ChannelLeaderActionState::Threads { .. } => {
-                let items = self.channel_action_thread_items();
-                let index = self.selected_channel_action_index()?;
-                let item = items.get(index)?.clone();
-                let guild_id = self
-                    .discord
-                    .channel(item.channel_id)
-                    .and_then(|c| c.guild_id);
-                self.activate_channel(item.channel_id);
-                self.close_channel_leader_action();
-                guild_id.map(|guild_id| AppCommand::SubscribeGuildChannel {
-                    guild_id,
-                    channel_id: item.channel_id,
-                })
-            }
-        }
-    }
-
-    pub fn activate_channel_action_shortcut(&mut self, shortcut: KeyChord) -> Option<AppCommand> {
-        match self.popups.channel_leader_action.as_ref()? {
-            ChannelLeaderActionState::Actions { .. } => {
-                let actions = self.selected_channel_action_items();
-                let index = self.options.key_bindings().matching_action_shortcut_index(
-                    &actions,
-                    shortcut,
-                    |key_bindings, actions, index| {
-                        key_bindings.channel_action_shortcuts(actions, index)
-                    },
-                    |action| action.enabled,
-                )?;
-                self.select_channel_action_row(index);
-                self.activate_selected_channel_action()
-            }
-            ChannelLeaderActionState::MuteDuration { .. } => {
-                let index = self
-                    .selected_channel_mute_duration_items()
-                    .iter()
-                    .enumerate()
-                    .position(|(index, _)| {
-                        self.options
-                            .key_bindings()
-                            .indexed_shortcut(index)
-                            .is_some_and(|candidate| shortcut.matches_char(candidate))
-                    })?;
-                self.select_channel_action_row(index);
-                self.activate_selected_channel_action()
-            }
-            ChannelLeaderActionState::Threads { .. } => {
-                let threads = self.channel_action_thread_items();
-                let index = threads.iter().enumerate().position(|(index, _)| {
-                    self.options
-                        .key_bindings()
-                        .indexed_shortcut(index)
-                        .is_some_and(|candidate| shortcut.matches_char(candidate))
-                })?;
-                self.select_channel_action_row(index);
-                self.activate_selected_channel_action()
-            }
-        }
     }
 
     pub(super) fn selected_channel_guild_id(&self) -> Option<Id<GuildMarker>> {
@@ -1243,7 +895,7 @@ impl DashboardState {
             .is_some_and(|voice_channel_id| voice_channel_id == channel_id)
     }
 
-    fn toggle_channel_mute(
+    pub(super) fn toggle_channel_mute(
         &mut self,
         channel_id: Id<ChannelMarker>,
         duration: Option<crate::discord::MuteDuration>,
@@ -1563,17 +1215,6 @@ impl DashboardState {
                     })
             }
             _ => None,
-        }
-    }
-
-    fn selected_channel_action_target_id(&self) -> Option<Id<ChannelMarker>> {
-        match self.channel_pane_entries().get(self.selected_channel()) {
-            Some(ChannelPaneEntry::CategoryHeader { state, .. }) => Some(state.id),
-            Some(
-                ChannelPaneEntry::Channel { state, .. } | ChannelPaneEntry::Thread { state, .. },
-            ) => Some(state.id),
-            Some(ChannelPaneEntry::VoiceParticipant { .. }) => None,
-            None => None,
         }
     }
 }

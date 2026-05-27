@@ -5,6 +5,10 @@ pub(in crate::tui::ui) fn render_poll_vote_picker(
     area: Rect,
     state: &DashboardState,
 ) {
+    if !state.is_active_modal_popup(ActiveModalPopupKind::PollVotePicker) {
+        return;
+    }
+
     let Some(answers) = state.poll_vote_picker_items() else {
         return;
     };
