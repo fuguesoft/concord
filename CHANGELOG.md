@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.7] - 2026-05-30
+
+### Bug Fixes
+
+- Fix fenced code block rendering for pasted multi-block messages by @chojs23
+- Fix owner/admin delete permission being mistaken for unknown state by @chojs23
+
+### Features
+
+- Add Discord message/member search (#141) in [#141](https://github.com/chojs23/concord/pull/141) by @chojs23
+
 ## [2.1.6] - 2026-05-29
 
 ### Bug Fixes
