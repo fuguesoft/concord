@@ -1,9 +1,23 @@
 use super::*;
 use crate::discord::AppCommand;
 
+fn push_foreign_reaction_emojis(state: &mut DashboardState) {
+    state.push_event(AppEvent::GuildEmojisUpdate {
+        guild_id: Id::new(9),
+        emojis: vec![
+            CustomEmojiInfo::test(Id::new(60), "wave_foreign"),
+            CustomEmojiInfo {
+                animated: true,
+                ..CustomEmojiInfo::test(Id::new(61), "dance_foreign")
+            },
+        ],
+    });
+}
+
 #[test]
 fn emoji_picker_items_include_available_custom_emojis_for_selected_message_guild() {
-    let state = state_with_custom_emojis();
+    let mut state = state_with_custom_emojis();
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: true });
 
     let items = state.emoji_reaction_items();
 
@@ -39,7 +53,8 @@ fn emoji_picker_items_include_available_custom_emojis_for_selected_message_guild
 
 #[test]
 fn custom_emoji_reaction_items_expose_cdn_image_url() {
-    let state = state_with_custom_emojis();
+    let mut state = state_with_custom_emojis();
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: true });
 
     let items = state.emoji_reaction_items();
 
@@ -48,6 +63,19 @@ fn custom_emoji_reaction_items_expose_cdn_image_url() {
         Some("https://cdn.discordapp.com/emojis/50.gif")
     );
     assert_eq!(items[0].custom_image_url(), None);
+}
+
+#[test]
+fn emoji_picker_items_hide_animated_custom_emojis_without_nitro() {
+    let mut state = state_with_custom_emojis();
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: false });
+
+    let items = state.emoji_reaction_items();
+
+    assert!(items.iter().all(|item| !matches!(
+        &item.emoji,
+        ReactionEmoji::Custom { id, .. } if *id == Id::new(50)
+    )));
 }
 
 #[test]
@@ -75,8 +103,100 @@ fn emoji_picker_items_include_custom_emojis_from_update_event() {
 }
 
 #[test]
+fn emoji_picker_items_include_foreign_custom_emojis_for_nitro_users() {
+    let mut state = state_with_custom_emojis();
+    push_foreign_reaction_emojis(&mut state);
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: true });
+
+    let items = state.emoji_reaction_items();
+
+    assert!(items.iter().any(|item| matches!(
+        &item.emoji,
+        ReactionEmoji::Custom { id, name, animated: false }
+            if *id == Id::new(60) && name.as_deref() == Some("wave_foreign")
+    )));
+    assert!(items.iter().any(|item| matches!(
+        &item.emoji,
+        ReactionEmoji::Custom { id, name, animated: true }
+            if *id == Id::new(61) && name.as_deref() == Some("dance_foreign")
+    )));
+}
+
+#[test]
+fn emoji_picker_items_hide_foreign_custom_emojis_without_nitro() {
+    let mut state = state_with_custom_emojis();
+    push_foreign_reaction_emojis(&mut state);
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: false });
+
+    let items = state.emoji_reaction_items();
+
+    assert!(items.iter().all(|item| {
+        !matches!(
+            item.emoji,
+            ReactionEmoji::Custom { id, .. } if id == Id::new(60) || id == Id::new(61)
+        )
+    }));
+}
+
+#[test]
+fn emoji_picker_selection_returns_foreign_custom_reaction_command_for_nitro_users() {
+    let mut state = state_with_custom_emojis();
+    push_foreign_reaction_emojis(&mut state);
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: true });
+    state.focus_pane(FocusPane::Messages);
+    state.open_emoji_reaction_picker();
+    state.start_emoji_reaction_filter();
+    for value in "wave foreign".chars() {
+        state.push_emoji_reaction_filter_char(value);
+    }
+
+    let command = state.activate_selected_emoji_reaction();
+
+    assert_eq!(
+        command,
+        Some(AppCommand::AddReaction {
+            channel_id: Id::new(2),
+            message_id: Id::new(1),
+            emoji: ReactionEmoji::Custom {
+                id: Id::new(60),
+                name: Some("wave_foreign".to_owned()),
+                animated: false,
+            },
+        })
+    );
+}
+
+#[test]
+fn direct_messages_include_foreign_custom_reactions_for_nitro_users() {
+    let mut state = DashboardState::new();
+    let channel_id = Id::new(20);
+    state.push_event(AppEvent::ChannelUpsert(dm_channel_info(channel_id, "neo")));
+    state.confirm_selected_guild();
+    state.confirm_selected_channel();
+    state.push_event(message_create_event(MessageCreateFixture {
+        guild_id: None,
+        channel_id,
+        message_id: Id::new(1),
+        author_id: Id::new(99),
+        content: Some("hello".to_owned()),
+        ..guild_message_create_fixture()
+    }));
+    push_foreign_reaction_emojis(&mut state);
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: true });
+
+    let items = state.emoji_reaction_items();
+
+    assert!(items.iter().any(|item| matches!(
+        &item.emoji,
+        ReactionEmoji::Custom { id, name, animated: false }
+            if *id == Id::new(60) && name.as_deref() == Some("wave_foreign")
+    )));
+}
+
+#[test]
 fn emoji_picker_uses_channel_guild_when_selected_message_lacks_guild_id() {
     let mut state = state_with_custom_emojis();
+    state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: true });
 
     state.push_event(message_create_event(MessageCreateFixture {
         guild_id: None,

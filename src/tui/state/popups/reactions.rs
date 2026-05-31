@@ -3,8 +3,8 @@ use crate::discord::ids::{Id, marker::GuildMarker};
 use crate::tui::fuzzy::{FuzzyScore, fuzzy_text_score};
 
 use super::super::emoji::{
-    custom_emoji_reaction_item, is_quick_unicode_emoji, quick_unicode_emoji_reaction_items,
-    remaining_unicode_emoji_reaction_items,
+    custom_emoji_can_be_used_directly, custom_emoji_reaction_item, is_quick_unicode_emoji,
+    quick_unicode_emoji_reaction_items, remaining_unicode_emoji_reaction_items,
 };
 use super::super::{
     DashboardState, EmojiReactionItem, EmojiReactionPickerState, ReactionUsersPopupState,
@@ -36,7 +36,35 @@ impl DashboardState {
                     .cache
                     .custom_emojis_for_guild(guild_id)
                     .iter()
-                    .filter(|emoji| emoji.available)
+                    .filter(|emoji| {
+                        emoji.available
+                            && custom_emoji_can_be_used_directly(
+                                emoji,
+                                false,
+                                self.current_user_has_nitro(),
+                            )
+                    })
+                    .map(custom_emoji_reaction_item),
+            );
+        }
+
+        if self.current_user_has_nitro() {
+            items.extend(
+                self.discord
+                    .cache
+                    .all_custom_emojis()
+                    .filter(|(emoji_guild_id, _)| {
+                        guild_id.is_none_or(|guild_id| guild_id != **emoji_guild_id)
+                    })
+                    .flat_map(|(_, emojis)| emojis)
+                    .filter(|emoji| {
+                        emoji.available
+                            && custom_emoji_can_be_used_directly(
+                                emoji,
+                                true,
+                                self.current_user_has_nitro(),
+                            )
+                    })
                     .map(custom_emoji_reaction_item),
             );
         }

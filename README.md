@@ -168,6 +168,8 @@ Tokens are saved under Concord's config directory in plain text. See the Securit
 - Upload / Download attachments
 - Search messages with filters with `/`
 - Use @mention autocomplete
+- Use custom emoji from other servers when your account supports it
+- Send custom emoji your account cannot use directly as image links when enabled
 - View full message history
 - Rich content display (embeds, attachments, stickers, and mentions)
 - Detect URLs in message bodies and markdown links, then open them in your default browser
@@ -190,6 +192,7 @@ Concord renders a practical subset of Discord-style Markdown in message bodies:
 ### Reactions & Polls
 
 - View, add, and remove emoji reactions (Unicode and custom server emoji)
+- Use custom emoji from other servers as reactions when your account supports it
 - Browse who reacted with a specific emoji
 - View and vote on polls
 
@@ -371,8 +374,11 @@ When the @mention picker is open, use `Up` / `Down`,
 
 #### Emoji picker
 
-Type `:` plus at least two letters, such as `:he`, to pick Unicode or server
-emoji while writing a message.
+Type `:` plus at least two letters, such as `:he`, to pick Unicode, server, or
+cross-server custom emoji while writing a message.
+
+When `emojis_as_links` is enabled, custom emoji your account cannot send
+directly are inserted as Discord image links instead.
 
 To react from the composer, select a message, enter insert mode, then type
 `+:`. The reaction picker opens for that message. Press `/` to search, Enter to
@@ -402,6 +408,7 @@ roaming AppData config directory on Windows.
 - Set image preview quality for attachments, embeds, and the attachment viewer
 - Toggle avatar display
 - Toggle custom emoji rendering
+- Send custom emoji your account cannot use directly as image links
 - Toggle desktop notifications
 - Set your Discord voice mute and deaf state
 - Set microphone and received voice volume from 0 to 100
@@ -429,6 +436,9 @@ image_preview_quality = "balanced"
 
 # Render custom Discord emoji as images when possible.
 show_custom_emoji = true
+
+# Send custom emoji your account cannot use directly as image links.
+emojis_as_links = false
 
 # Crop avatars into circles instead of showing square images.
 circular_avatars = false

@@ -536,10 +536,32 @@ fn raw_ready_parser_exposes_current_user_premium_capability() {
 
     assert!(events.iter().any(|event| matches!(
         event,
-        AppEvent::CurrentUserCapabilities {
-            can_use_animated_custom_emojis: false
-        }
+        AppEvent::CurrentUserCapabilities { has_nitro: false }
     )));
+}
+
+#[test]
+fn raw_ready_parser_exposes_current_user_nitro_capabilities() {
+    let events = parse_user_account_event(
+        &json!({
+            "t": "READY",
+            "d": {
+                "user": {
+                    "id": "99",
+                    "username": "neo",
+                    "premium_type": 2
+                },
+                "guilds": []
+            }
+        })
+        .to_string(),
+    );
+
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, AppEvent::CurrentUserCapabilities { has_nitro: true }))
+    );
 }
 
 #[test]

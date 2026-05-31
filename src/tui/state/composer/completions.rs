@@ -8,7 +8,7 @@ use crate::discord::{
     PresenceStatus, RoleState,
 };
 
-use super::super::MemberEntry;
+use super::super::{MemberEntry, emoji::custom_emoji_can_be_used_directly};
 
 /// Maximum number of suggestions composer pickers show at once. Candidate
 /// builders still return every match. Rendering scrolls this many rows.
@@ -327,7 +327,7 @@ pub(super) fn build_emoji_candidates<'a>(
     query: &str,
     foreign_emojis: impl Iterator<Item = &'a CustomEmojiInfo>,
     guild_emojis: impl Iterator<Item = &'a CustomEmojiInfo>,
-    can_use_animated_custom_emojis: bool,
+    has_nitro: bool,
     emojis_as_links: bool,
 ) -> Vec<EmojiPickerEntry> {
     let needle = query.to_ascii_lowercase();
@@ -335,8 +335,10 @@ pub(super) fn build_emoji_candidates<'a>(
         return Vec::new();
     }
 
-    let make_entry = |is_foreign| {
+    let make_entry = |is_foreign: bool| {
         move |emoji: &CustomEmojiInfo| {
+            let can_send_directly = custom_emoji_can_be_used_directly(emoji, is_foreign, has_nitro);
+            let as_link = emojis_as_links && !can_send_directly;
             let shortcode = emoji.name.clone();
             let marker = if emoji.animated { "◇" } else { "◆" };
             let label = if emoji.animated {
@@ -355,10 +357,9 @@ pub(super) fn build_emoji_candidates<'a>(
                         &shortcode,
                         emoji.id,
                         emoji.animated,
-                        is_foreign && emojis_as_links,
+                        as_link,
                     )),
-                    available: emoji.available
-                        && (!emoji.animated || can_use_animated_custom_emojis || emojis_as_links),
+                    available: emoji.available && (can_send_directly || as_link),
                     custom_image_url: Some(custom_emoji_image_url(emoji.id, emoji.animated)),
                 },
             )
@@ -369,7 +370,7 @@ pub(super) fn build_emoji_candidates<'a>(
         .map(|emoji| make_entry(false)(emoji))
         .collect();
 
-    if emojis_as_links {
+    if has_nitro || emojis_as_links {
         scored.extend(
             foreign_emojis
                 .filter(|emoji| emoji.name.to_ascii_lowercase().starts_with(&needle))

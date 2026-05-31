@@ -1117,9 +1117,7 @@ impl DashboardState {
             query,
             foreign_emojis,
             guild_emojis,
-            self.discord
-                .current_user_can_use_animated_custom_emojis
-                .unwrap_or(false),
+            self.current_user_has_nitro(),
             self.options.display_options.emojis_as_links,
         )
     }

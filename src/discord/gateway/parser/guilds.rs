@@ -153,9 +153,9 @@ fn parse_custom_emoji(value: &Value) -> Option<CustomEmojiInfo> {
     })
 }
 
-pub(super) fn parse_user_can_use_animated_custom_emojis(user: &Value) -> Option<bool> {
+pub(super) fn parse_user_has_nitro(user: &Value) -> Option<bool> {
     // Discord exposes `premium_type` on the current user object. Any non-zero
-    // value represents a Nitro tier that can use animated custom emojis.
+    // value represents a Nitro tier.
     user.get("premium_type")
         .and_then(Value::as_u64)
         .map(|premium_type| premium_type != 0)

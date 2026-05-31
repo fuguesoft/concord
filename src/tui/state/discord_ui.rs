@@ -20,7 +20,7 @@ pub(super) struct DiscordUiState {
     pub(super) current_user: Option<String>,
     pub(super) current_user_id: Option<Id<UserMarker>>,
     pub(super) application_commands: HashMap<Option<Id<GuildMarker>>, Vec<ApplicationCommandInfo>>,
-    pub(super) current_user_can_use_animated_custom_emojis: Option<bool>,
+    pub(super) current_user_has_nitro: Option<bool>,
     pub(super) update_available_version: Option<String>,
 }
 
@@ -39,6 +39,10 @@ impl DerefMut for DiscordUiState {
 }
 
 impl DashboardState {
+    pub(super) fn current_user_has_nitro(&self) -> bool {
+        self.discord.current_user_has_nitro.unwrap_or(false)
+    }
+
     pub fn restore_discord_snapshot(&mut self, discord: DiscordState) {
         self.restore_discord_snapshot_with(SnapshotAreas::all(), |state| {
             *state = discord;

@@ -26,7 +26,7 @@ pub enum AppEvent {
         user_id: Option<Id<UserMarker>>,
     },
     CurrentUserCapabilities {
-        can_use_animated_custom_emojis: bool,
+        has_nitro: bool,
     },
     ApplicationCommandsLoaded {
         guild_id: Option<Id<GuildMarker>>,
@@ -616,9 +616,7 @@ mod tests {
 
     #[test]
     fn current_user_capabilities_are_delivered_as_ui_effect_only() {
-        let event = AppEvent::CurrentUserCapabilities {
-            can_use_animated_custom_emojis: true,
-        };
+        let event = AppEvent::CurrentUserCapabilities { has_nitro: true };
 
         assert!(!event.mutates_discord_state());
         assert!(event.needs_effect_delivery());

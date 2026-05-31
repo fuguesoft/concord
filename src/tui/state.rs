@@ -187,11 +187,8 @@ impl DashboardState {
                 self.runtime.gateway_error = Some(message.clone());
                 self.show_error_toast(message, Instant::now());
             }
-            AppEvent::CurrentUserCapabilities {
-                can_use_animated_custom_emojis,
-            } => {
-                self.discord.current_user_can_use_animated_custom_emojis =
-                    Some(*can_use_animated_custom_emojis);
+            AppEvent::CurrentUserCapabilities { has_nitro } => {
+                self.discord.current_user_has_nitro = Some(*has_nitro);
             }
             AppEvent::ApplicationCommandsLoaded { guild_id, commands } => {
                 self.discord

@@ -49,6 +49,14 @@ pub(super) fn custom_emoji_reaction_item(emoji: &CustomEmojiInfo) -> EmojiReacti
     }
 }
 
+pub(super) fn custom_emoji_can_be_used_directly(
+    emoji: &CustomEmojiInfo,
+    is_foreign: bool,
+    has_nitro: bool,
+) -> bool {
+    (!is_foreign && !emoji.animated) || has_nitro
+}
+
 fn custom_emoji_label(name: &str) -> String {
     title_case_words(name.split('_'))
 }
