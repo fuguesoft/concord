@@ -99,6 +99,7 @@ fn state_with_keymap(keymap: KeymapOptions) -> DashboardState {
         Default::default(),
         Default::default(),
         Default::default(),
+        Default::default(),
         keymap,
         Default::default(),
     )

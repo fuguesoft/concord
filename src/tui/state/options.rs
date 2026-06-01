@@ -1,6 +1,6 @@
 use crate::config::{
-    AppOptions, DisplayOptions, ImagePreviewQualityPreset, KeymapOptions, NotificationOptions,
-    UiStateOptions, VoiceOptions,
+    AppOptions, ComposerOptions, DisplayOptions, ImagePreviewQualityPreset, KeymapOptions,
+    NotificationOptions, UiStateOptions, VoiceOptions,
 };
 use crate::discord::AppCommand;
 use crate::tui::keybindings::KeyBindings;
@@ -38,6 +38,7 @@ impl DisplayOptionItem {
 #[derive(Debug, Default)]
 pub(super) struct OptionsUiState {
     pub(super) display_options: DisplayOptions,
+    pub(super) composer_options: ComposerOptions,
     pub(super) notification_options: NotificationOptions,
     pub(super) voice_options: VoiceOptions,
     pub(super) key_bindings: KeyBindings,
@@ -53,6 +54,7 @@ impl OptionsUiState {
 impl DashboardState {
     pub fn new_with_options(
         display_options: DisplayOptions,
+        composer_options: ComposerOptions,
         notification_options: NotificationOptions,
         voice_options: VoiceOptions,
         keymap_options: KeymapOptions,
@@ -60,6 +62,7 @@ impl DashboardState {
     ) -> Self {
         let mut state = Self::new();
         state.options.display_options = display_options;
+        state.options.composer_options = composer_options;
         state.options.notification_options = notification_options;
         state.options.voice_options = voice_options;
         state.options.key_bindings = KeyBindings::from_options(&keymap_options);
@@ -72,9 +75,15 @@ impl DashboardState {
     }
 
     #[cfg(test)]
+    pub fn composer_options(&self) -> ComposerOptions {
+        self.options.composer_options
+    }
+
+    #[cfg(test)]
     pub fn new_with_display_options(display_options: DisplayOptions) -> Self {
         Self::new_with_options(
             display_options,
+            ComposerOptions::default(),
             NotificationOptions::default(),
             VoiceOptions::default(),
             KeymapOptions::default(),
@@ -86,6 +95,7 @@ impl DashboardState {
     pub fn new_with_voice_options(voice_options: VoiceOptions) -> Self {
         Self::new_with_options(
             DisplayOptions::default(),
+            ComposerOptions::default(),
             NotificationOptions::default(),
             voice_options,
             KeymapOptions::default(),
@@ -97,6 +107,7 @@ impl DashboardState {
     pub fn new_with_notification_options(notification_options: NotificationOptions) -> Self {
         Self::new_with_options(
             DisplayOptions::default(),
+            ComposerOptions::default(),
             notification_options,
             VoiceOptions::default(),
             KeymapOptions::default(),
@@ -243,6 +254,7 @@ impl DashboardState {
         self.options.options_save_pending = false;
         Some(AppOptions {
             display: self.options.display_options,
+            composer: self.options.composer_options,
             notifications: self.options.notification_options.clone(),
             voice: self.options.voice_options,
             ui_state: self.ui_state_options(),

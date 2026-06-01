@@ -14,6 +14,7 @@ fn options_popup_toggles_selected_setting() {
         state.take_options_save_request(),
         Some(AppOptions {
             display: state.display_options(),
+            composer: state.composer_options(),
             notifications: state.notification_options(),
             voice: state.voice_options(),
             ui_state: Default::default(),
@@ -39,6 +40,7 @@ fn options_popup_cycles_image_preview_quality() {
         state.take_options_save_request(),
         Some(AppOptions {
             display: state.display_options(),
+            composer: state.composer_options(),
             notifications: state.notification_options(),
             voice: state.voice_options(),
             ui_state: Default::default(),
@@ -97,6 +99,7 @@ fn options_popup_h_l_adjust_microphone_sensitivity_by_one_or_ten_db() {
         state.take_options_save_request(),
         Some(AppOptions {
             display: state.display_options(),
+            composer: state.composer_options(),
             notifications: state.notification_options(),
             voice: state.voice_options(),
             ui_state: Default::default(),
@@ -138,8 +141,30 @@ fn options_popup_selection_aliases_move_selection() {
     assert_eq!(state.selected_option_index(), Some(0));
 
     handle_key(&mut state, ctrl_key('d'));
-    assert_eq!(state.selected_option_index(), Some(6));
+    assert_eq!(state.selected_option_index(), Some(5));
 
     handle_key(&mut state, ctrl_key('u'));
     assert_eq!(state.selected_option_index(), Some(0));
+}
+
+#[test]
+fn options_popup_toggles_composer_emoji_links() {
+    let mut state = state_with_messages(1);
+
+    handle_key(&mut state, char_key(' '));
+    handle_key(&mut state, char_key('o'));
+    handle_key(&mut state, char_key('c'));
+    handle_key(&mut state, key(KeyCode::Enter));
+
+    assert!(state.composer_options().emojis_as_links);
+    assert_eq!(
+        state.take_options_save_request(),
+        Some(AppOptions {
+            display: state.display_options(),
+            composer: state.composer_options(),
+            notifications: state.notification_options(),
+            voice: state.voice_options(),
+            ui_state: Default::default(),
+        })
+    );
 }

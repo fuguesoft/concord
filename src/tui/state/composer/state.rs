@@ -1118,7 +1118,7 @@ impl DashboardState {
             foreign_emojis,
             guild_emojis,
             self.current_user_has_nitro(),
-            self.options.display_options.emojis_as_links,
+            self.options.composer_options.emojis_as_links,
         )
     }
 }

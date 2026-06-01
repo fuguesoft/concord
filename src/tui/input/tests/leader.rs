@@ -629,8 +629,9 @@ fn leader_o_opens_options_category_picker() {
     assert!(state.is_options_category_picker_open());
     assert_eq!(state.options_popup_title(), "Options");
     assert_eq!(state.display_option_items()[0].label, "Display");
-    assert_eq!(state.display_option_items()[1].label, "Notifications");
-    assert_eq!(state.display_option_items()[2].label, "Voice");
+    assert_eq!(state.display_option_items()[1].label, "Composer");
+    assert_eq!(state.display_option_items()[2].label, "Notifications");
+    assert_eq!(state.display_option_items()[3].label, "Voice");
 }
 
 #[test]

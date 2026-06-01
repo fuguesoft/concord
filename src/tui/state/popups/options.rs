@@ -5,10 +5,11 @@ use crate::tui::keybindings::OptionsCategoryShortcut;
 use super::super::{DashboardState, DisplayOptionItem};
 use super::{ActiveModalPopupKind, ModalPopup, OptionsCategory, OptionsPopupState};
 
-const DISPLAY_OPTION_COUNT: usize = 7;
+const DISPLAY_OPTION_COUNT: usize = 6;
+const COMPOSER_OPTION_COUNT: usize = 1;
 const NOTIFICATION_OPTION_COUNT: usize = 1;
 const VOICE_OPTION_COUNT: usize = 6;
-const OPTION_CATEGORY_COUNT: usize = 3;
+const OPTION_CATEGORY_COUNT: usize = 4;
 
 impl DashboardState {
     #[cfg(test)]
@@ -58,6 +59,7 @@ impl DashboardState {
         match self.popups.options_popup().and_then(|popup| popup.category) {
             None => "Options",
             Some(OptionsCategory::Display) => "Display Options",
+            Some(OptionsCategory::Composer) => "Composer Options",
             Some(OptionsCategory::Notifications) => "Notification Options",
             Some(OptionsCategory::Voice) => "Voice Options",
         }
@@ -73,6 +75,7 @@ impl DashboardState {
         match self.popups.options_popup().and_then(|popup| popup.category) {
             None => OPTION_CATEGORY_COUNT,
             Some(OptionsCategory::Display) => DISPLAY_OPTION_COUNT,
+            Some(OptionsCategory::Composer) => COMPOSER_OPTION_COUNT,
             Some(OptionsCategory::Notifications) => NOTIFICATION_OPTION_COUNT,
             Some(OptionsCategory::Voice) => VOICE_OPTION_COUNT,
         }
@@ -84,6 +87,7 @@ impl DashboardState {
                 return self.option_category_items();
             }
             Some(OptionsCategory::Display) => return self.display_option_items_for_display(),
+            Some(OptionsCategory::Composer) => return self.display_option_items_for_composer(),
             Some(OptionsCategory::Notifications) => {
                 return self.display_option_items_for_notifications();
             }
@@ -92,6 +96,7 @@ impl DashboardState {
         }
 
         let mut items = self.display_option_items_for_display();
+        items.extend(self.display_option_items_for_composer());
         items.extend(self.display_option_items_for_notifications());
         items.extend(self.display_option_items_for_voice());
         items
@@ -110,7 +115,19 @@ impl DashboardState {
                 ),
                 gauge_percent: None,
                 effective: true,
-                description: "Image, emoji, and pane display settings.",
+                description: "Image, custom emoji, and pane display settings.",
+            },
+            DisplayOptionItem {
+                label: "Composer",
+                enabled: true,
+                value: Some(
+                    key_bindings
+                        .options_category_shortcut_label(OptionsCategoryShortcut::Composer)
+                        .to_owned(),
+                ),
+                gauge_percent: None,
+                effective: true,
+                description: "Message input and send-format settings.",
             },
             DisplayOptionItem {
                 label: "Notifications",
@@ -190,15 +207,19 @@ impl DashboardState {
                 effective: options.avatars_visible() && options.circular_avatars,
                 description: "Mask message and profile avatars into a circle.",
             },
-            DisplayOptionItem {
-                label: "Emojis as links",
-                enabled: options.emojis_as_links,
-                value: None,
-                gauge_percent: None,
-                effective: options.emojis_as_links,
-                description: "Sends unavailable emojis as a link instead.",
-            },
         ]
+    }
+
+    fn display_option_items_for_composer(&self) -> Vec<DisplayOptionItem> {
+        let options = self.options.composer_options;
+        vec![DisplayOptionItem {
+            label: "Emojis as links",
+            enabled: options.emojis_as_links,
+            value: None,
+            gauge_percent: None,
+            effective: options.emojis_as_links,
+            description: "Sends unavailable emojis as a link instead.",
+        }]
     }
 
     fn display_option_items_for_notifications(&self) -> Vec<DisplayOptionItem> {
@@ -307,9 +328,9 @@ impl DashboardState {
                 self.options.display_options.circular_avatars =
                     !self.options.display_options.circular_avatars
             }
-            (OptionsCategory::Display, 6) => {
-                self.options.display_options.emojis_as_links =
-                    !self.options.display_options.emojis_as_links
+            (OptionsCategory::Composer, 0) => {
+                self.options.composer_options.emojis_as_links =
+                    !self.options.composer_options.emojis_as_links
             }
             (OptionsCategory::Notifications, 0) => {
                 self.options.notification_options.desktop_notifications =
@@ -373,6 +394,9 @@ impl DashboardState {
             OptionsCategoryShortcut::Display => {
                 self.open_options_category(OptionsCategory::Display)
             }
+            OptionsCategoryShortcut::Composer => {
+                self.open_options_category(OptionsCategory::Composer)
+            }
             OptionsCategoryShortcut::Notifications => {
                 self.open_options_category(OptionsCategory::Notifications)
             }
@@ -383,8 +407,9 @@ impl DashboardState {
     fn open_selected_options_category(&mut self) {
         match self.selected_option_index() {
             Some(0) => self.open_options_category(OptionsCategory::Display),
-            Some(1) => self.open_options_category(OptionsCategory::Notifications),
-            Some(2) => self.open_options_category(OptionsCategory::Voice),
+            Some(1) => self.open_options_category(OptionsCategory::Composer),
+            Some(2) => self.open_options_category(OptionsCategory::Notifications),
+            Some(3) => self.open_options_category(OptionsCategory::Voice),
             _ => {}
         }
     }

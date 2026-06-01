@@ -65,6 +65,7 @@ pub(super) async fn run_dashboard(
     };
     let mut state = DashboardState::new_with_options(
         options.display,
+        options.composer,
         options.notifications,
         options.voice,
         keymap_options,

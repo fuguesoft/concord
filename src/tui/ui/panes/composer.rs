@@ -388,7 +388,15 @@ pub(in crate::tui::ui) fn emoji_picker_lines(
                     .as_ref()
                     .is_some_and(|url| ready_custom_emoji_urls.iter().any(|ready| ready == url));
             let prefix_width = emoji_picker_entry_prefix_width(entry, custom_image_ready);
-            let max_label_width = width.saturating_sub(2).saturating_sub(prefix_width).max(1);
+            let description = entry.available_as_link.then_some("available as image link");
+            let description_width = description
+                .map(|value| value.width().saturating_add(" - ".width()))
+                .unwrap_or_default();
+            let max_label_width = width
+                .saturating_sub(2)
+                .saturating_sub(prefix_width)
+                .saturating_sub(description_width)
+                .max(1);
             let label = format!(":{}: {}", entry.shortcode, entry.name);
             let label = truncate_display_width(&label, max_label_width);
             let mut row_style = if entry.available {
@@ -408,6 +416,10 @@ pub(in crate::tui::ui) fn emoji_picker_lines(
                 row_style,
             ));
             spans.push(Span::styled(label, row_style));
+            if let Some(description) = description {
+                spans.push(Span::styled(" - ", Style::default().fg(DIM)));
+                spans.push(Span::styled(description, Style::default().fg(DIM)));
+            }
             Line::from(spans)
         })
         .collect()

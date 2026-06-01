@@ -864,6 +864,7 @@ fn leader_popup_shows_keymap_entries_alongside_default_entries() {
         Default::default(),
         Default::default(),
         Default::default(),
+        Default::default(),
         crate::config::KeymapOptions {
             leader: Some("space".to_owned()),
             groups: BTreeMap::new(),
@@ -921,6 +922,7 @@ fn leader_popup_expands_horizontally_for_many_keymap_entries() {
         Default::default(),
         Default::default(),
         Default::default(),
+        Default::default(),
         crate::config::KeymapOptions {
             leader: Some("space".to_owned()),
             groups: BTreeMap::new(),
@@ -954,6 +956,7 @@ fn leader_popup_shows_non_leader_prefix_title_and_description() {
         },
     );
     let mut state = DashboardState::new_with_options(
+        Default::default(),
         Default::default(),
         Default::default(),
         Default::default(),
@@ -1007,6 +1010,7 @@ fn leader_action_popup_renders_modified_action_shortcut_labels() {
         crate::config::KeymapBinding::one("<C-u>"),
     );
     let mut state = DashboardState::new_with_options(
+        Default::default(),
         Default::default(),
         Default::default(),
         Default::default(),

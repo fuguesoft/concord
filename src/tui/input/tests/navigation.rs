@@ -182,6 +182,7 @@ fn alt_arrows_adjust_focused_side_pane_width() {
         state.take_options_save_request(),
         Some(AppOptions {
             display: state.display_options(),
+            composer: state.composer_options(),
             notifications: state.notification_options(),
             voice: state.voice_options(),
             ui_state: Default::default(),

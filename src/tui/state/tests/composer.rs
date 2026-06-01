@@ -878,6 +878,10 @@ fn unavailable_custom_emojis_stay_visible_but_not_selectable() {
             .unwrap_or_else(|| panic!("{label} should stay visible in suggestions"));
 
         assert!(!entry.available, "{label} should be unavailable");
+        assert!(
+            !entry.available_as_link,
+            "{label} should not be link-available"
+        );
         assert_eq!(entry.wire_format.as_deref(), Some(wire_format));
         assert!(
             !state.confirm_composer_emoji(),
@@ -901,6 +905,7 @@ fn active_emoji_candidates_refresh_when_nitro_capability_changes() {
         .find(|entry| entry.shortcode == "party_time")
         .expect("animated custom emoji should stay visible in suggestions");
     assert!(!before.available);
+    assert!(!before.available_as_link);
 
     state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: true });
 
@@ -910,6 +915,7 @@ fn active_emoji_candidates_refresh_when_nitro_capability_changes() {
         .find(|entry| entry.shortcode == "party_time")
         .expect("active emoji suggestions should refresh after capability changes");
     assert!(after.available);
+    assert!(!after.available_as_link);
 }
 
 #[test]
@@ -959,6 +965,14 @@ fn custom_emoji_submit_keeps_readable_text_and_sends_wire_format() {
         state.push_composer_char(ch);
     }
 
+    let entry = state
+        .composer_emoji_candidates()
+        .into_iter()
+        .find(|entry| entry.shortcode == "party_time")
+        .expect("animated custom emoji should stay visible in suggestions");
+    assert!(entry.available);
+    assert!(!entry.available_as_link);
+
     assert!(state.confirm_composer_emoji());
 
     assert_eq!(state.composer_input(), ":party_time: ");
@@ -1000,12 +1014,20 @@ fn custom_emoji_submit_keeps_readable_text_and_sends_wire_format() {
 #[test]
 fn animated_current_guild_emoji_sends_link_without_nitro_when_enabled() {
     let mut state = state_with_custom_emojis();
-    state.options.display_options.emojis_as_links = true;
+    state.options.composer_options.emojis_as_links = true;
     state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: false });
     state.start_composer();
     for ch in ":pa".chars() {
         state.push_composer_char(ch);
     }
+
+    let entry = state
+        .composer_emoji_candidates()
+        .into_iter()
+        .find(|entry| entry.shortcode == "party_time")
+        .expect("animated custom emoji should be suggested as a link fallback");
+    assert!(entry.available);
+    assert!(entry.available_as_link);
 
     assert!(state.confirm_composer_emoji());
 
@@ -1052,6 +1074,14 @@ fn nitro_user_sends_foreign_custom_emojis_as_native_markup() {
         state.push_composer_char(ch);
     }
 
+    let entry = state
+        .composer_emoji_candidates()
+        .into_iter()
+        .find(|entry| entry.shortcode == "dance_foreign")
+        .expect("foreign animated emoji should be suggested as a link fallback");
+    assert!(entry.available);
+    assert!(!entry.available_as_link);
+
     assert!(state.confirm_composer_emoji());
 
     assert_eq!(state.composer_input(), ":dance_foreign: ");
@@ -1070,12 +1100,20 @@ fn nitro_user_sends_foreign_custom_emojis_as_native_markup() {
 fn foreign_custom_emoji_uses_link_fallback_without_nitro_when_enabled() {
     let mut state = state_with_custom_emojis();
     push_foreign_custom_emojis(&mut state);
-    state.options.display_options.emojis_as_links = true;
+    state.options.composer_options.emojis_as_links = true;
     state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: false });
     state.start_composer();
     for ch in ":wa".chars() {
         state.push_composer_char(ch);
     }
+
+    let entry = state
+        .composer_emoji_candidates()
+        .into_iter()
+        .find(|entry| entry.shortcode == "wave_foreign")
+        .expect("foreign custom emoji should be suggested as a link fallback");
+    assert!(entry.available);
+    assert!(entry.available_as_link);
 
     assert!(state.confirm_composer_emoji());
 
@@ -1095,12 +1133,20 @@ fn foreign_custom_emoji_uses_link_fallback_without_nitro_when_enabled() {
 fn foreign_animated_emoji_uses_link_fallback_without_nitro_when_enabled() {
     let mut state = state_with_custom_emojis();
     push_foreign_custom_emojis(&mut state);
-    state.options.display_options.emojis_as_links = true;
+    state.options.composer_options.emojis_as_links = true;
     state.push_event(AppEvent::CurrentUserCapabilities { has_nitro: false });
     state.start_composer();
     for ch in ":da".chars() {
         state.push_composer_char(ch);
     }
+
+    let entry = state
+        .composer_emoji_candidates()
+        .into_iter()
+        .find(|entry| entry.shortcode == "dance_foreign")
+        .expect("foreign animated emoji should be suggested as a link fallback");
+    assert!(entry.available);
+    assert!(entry.available_as_link);
 
     assert!(state.confirm_composer_emoji());
 

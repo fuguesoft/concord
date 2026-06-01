@@ -46,6 +46,7 @@ pub(in crate::tui) enum UiAction {
     OpenOptions,
     ChannelSwitcher,
     OpenDisplayOptions,
+    OpenComposerOptions,
     OpenNotificationOptions,
     OpenVoiceOptions,
     VoiceDeafen,
@@ -211,6 +212,7 @@ pub(in crate::tui) enum DebugLogPopupAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OptionsCategoryShortcut {
     Display,
+    Composer,
     Notifications,
     Voice,
 }

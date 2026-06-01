@@ -326,6 +326,7 @@ pub struct GuildLeaveConfirmationState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OptionsCategory {
     Display,
+    Composer,
     Notifications,
     Voice,
 }

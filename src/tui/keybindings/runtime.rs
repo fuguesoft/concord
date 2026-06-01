@@ -430,7 +430,7 @@ impl KeyBindings {
             return Some(OptionsPopupAction::Select(action));
         }
         match key.code {
-            KeyCode::Char(shortcut @ ('d' | 'D' | 'n' | 'N' | 'v' | 'V'))
+            KeyCode::Char(shortcut @ ('d' | 'D' | 'c' | 'C' | 'n' | 'N' | 'v' | 'V'))
                 if is_shortcut_key(key) && category_picker_open =>
             {
                 self.options_category_shortcut(shortcut)
@@ -679,6 +679,7 @@ impl KeyBindings {
     pub fn options_category_shortcut(&self, shortcut: char) -> Option<OptionsCategoryShortcut> {
         match shortcut {
             'd' | 'D' => Some(OptionsCategoryShortcut::Display),
+            'c' | 'C' => Some(OptionsCategoryShortcut::Composer),
             'n' | 'N' => Some(OptionsCategoryShortcut::Notifications),
             'v' | 'V' => Some(OptionsCategoryShortcut::Voice),
             _ => None,
@@ -688,6 +689,7 @@ impl KeyBindings {
     pub fn options_category_shortcut_label(&self, category: OptionsCategoryShortcut) -> String {
         let action = match category {
             OptionsCategoryShortcut::Display => UiAction::OpenDisplayOptions,
+            OptionsCategoryShortcut::Composer => UiAction::OpenComposerOptions,
             OptionsCategoryShortcut::Notifications => UiAction::OpenNotificationOptions,
             OptionsCategoryShortcut::Voice => UiAction::OpenVoiceOptions,
         };
@@ -695,6 +697,7 @@ impl KeyBindings {
         if label.is_empty() {
             match category {
                 OptionsCategoryShortcut::Display => "d",
+                OptionsCategoryShortcut::Composer => "c",
                 OptionsCategoryShortcut::Notifications => "n",
                 OptionsCategoryShortcut::Voice => "v",
             }

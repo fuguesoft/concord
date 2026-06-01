@@ -437,11 +437,12 @@ image_preview_quality = "balanced"
 # Render custom Discord emoji as images when possible.
 show_custom_emoji = true
 
-# Send custom emoji your account cannot use directly as image links.
-emojis_as_links = false
-
 # Crop avatars into circles instead of showing square images.
 circular_avatars = false
+
+[composer]
+# Send custom emoji your account cannot use directly as image links.
+emojis_as_links = false
 
 [notifications]
 # Show desktop notifications for Discord messages that pass notification rules.
@@ -588,9 +589,9 @@ selection down and up.
 
 These action names can be assigned directly under `[keymap]`. Defaults
 that start with `<leader>` are shown without the leading `Space` in the leader
-popup. `OpenDisplayOptions`, `OpenNotificationOptions`, and `OpenVoiceOptions`
-have contextual defaults inside the Options popup, so assign your own full
-sequence if you want direct keys for them.
+popup. `OpenDisplayOptions`, `OpenComposerOptions`, `OpenNotificationOptions`,
+and `OpenVoiceOptions` have contextual defaults inside the Options popup, so
+assign your own full sequence if you want direct keys for them.
 
 Navigation and app actions:
 
@@ -647,6 +648,7 @@ Pane, options, and voice actions:
 | `OpenOptions`             | `"<leader>o"`                      | Open the options category picker.            |
 | `ChannelSwitcher`         | `"<leader><leader>"`               | Open channel switcher.                       |
 | `OpenDisplayOptions`      | Contextual `d` after `OpenOptions` | Open Display options.                        |
+| `OpenComposerOptions`     | Contextual `c` after `OpenOptions` | Open Composer options.                       |
 | `OpenNotificationOptions` | Contextual `n` after `OpenOptions` | Open Notification options.                   |
 | `OpenVoiceOptions`        | Contextual `v` after `OpenOptions` | Open Voice options.                          |
 | `VoiceDeafen`             | `"<leader>vd"`                     | Toggle voice deafen.                         |

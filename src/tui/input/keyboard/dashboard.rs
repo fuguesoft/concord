@@ -134,6 +134,9 @@ pub(super) fn execute_ui_action(
         UiAction::OpenDisplayOptions => {
             state.open_options_category_from_shortcut(OptionsCategoryShortcut::Display)
         }
+        UiAction::OpenComposerOptions => {
+            state.open_options_category_from_shortcut(OptionsCategoryShortcut::Composer)
+        }
         UiAction::OpenNotificationOptions => {
             state.open_options_category_from_shortcut(OptionsCategoryShortcut::Notifications)
         }

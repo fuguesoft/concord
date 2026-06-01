@@ -379,6 +379,7 @@ fn collapsed_category_state_is_saved_and_restored() {
         .expect("collapse should request an options save");
     let restored = DashboardState::new_with_options(
         DisplayOptions::default(),
+        Default::default(),
         NotificationOptions::default(),
         VoiceOptions::default(),
         Default::default(),

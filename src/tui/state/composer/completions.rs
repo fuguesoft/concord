@@ -76,6 +76,7 @@ pub struct EmojiPickerEntry {
     pub name: String,
     pub wire_format: Option<String>,
     pub available: bool,
+    pub available_as_link: bool,
     pub custom_image_url: Option<String>,
 }
 
@@ -360,6 +361,7 @@ pub(super) fn build_emoji_candidates<'a>(
                         as_link,
                     )),
                     available: emoji.available && (can_send_directly || as_link),
+                    available_as_link: emoji.available && as_link,
                     custom_image_url: Some(custom_emoji_image_url(emoji.id, emoji.animated)),
                 },
             )
@@ -392,6 +394,7 @@ pub(super) fn build_emoji_candidates<'a>(
                         name: emoji.name().to_owned(),
                         wire_format: None,
                         available: true,
+                        available_as_link: false,
                         custom_image_url: None,
                     },
                 )

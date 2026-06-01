@@ -703,6 +703,7 @@ impl UiAction {
             UiAction::OpenOptions => "OpenOptions",
             UiAction::ChannelSwitcher => "ChannelSwitcher",
             UiAction::OpenDisplayOptions => "OpenDisplayOptions",
+            UiAction::OpenComposerOptions => "OpenComposerOptions",
             UiAction::OpenNotificationOptions => "OpenNotificationOptions",
             UiAction::OpenVoiceOptions => "OpenVoiceOptions",
             UiAction::VoiceDeafen => "VoiceDeafen",
@@ -754,6 +755,7 @@ impl UiAction {
             UiAction::OpenOptions => "Options",
             UiAction::ChannelSwitcher => "Switch channels",
             UiAction::OpenDisplayOptions => "Display options",
+            UiAction::OpenComposerOptions => "Composer options",
             UiAction::OpenNotificationOptions => "Notification options",
             UiAction::OpenVoiceOptions => "Voice options",
             UiAction::VoiceDeafen => "deafen voice",
@@ -905,6 +907,7 @@ fn all_ui_actions() -> &'static [UiAction] {
         UiAction::OpenOptions,
         UiAction::ChannelSwitcher,
         UiAction::OpenDisplayOptions,
+        UiAction::OpenComposerOptions,
         UiAction::OpenNotificationOptions,
         UiAction::OpenVoiceOptions,
         UiAction::VoiceDeafen,
@@ -985,6 +988,7 @@ fn default_keymap_specs(leader: KeyChord) -> BTreeMap<UiAction, KeyMapActionSpec
             UiAction::OpenOptions => vec![vec![leader, char_chord('o')]],
             UiAction::ChannelSwitcher => vec![vec![leader, leader]],
             UiAction::OpenDisplayOptions
+            | UiAction::OpenComposerOptions
             | UiAction::OpenNotificationOptions
             | UiAction::OpenVoiceOptions => Vec::new(),
             UiAction::VoiceDeafen => vec![vec![leader, char_chord('v'), char_chord('d')]],
@@ -1651,6 +1655,10 @@ mod tests {
         assert_eq!(
             key_bindings.options_category_shortcut_label(OptionsCategoryShortcut::Display),
             "d"
+        );
+        assert_eq!(
+            key_bindings.options_category_shortcut_label(OptionsCategoryShortcut::Composer),
+            "c"
         );
         assert_eq!(
             key_bindings.options_category_shortcut_label(OptionsCategoryShortcut::Notifications),

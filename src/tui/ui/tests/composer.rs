@@ -344,6 +344,7 @@ fn emoji_picker_lines_cross_out_unavailable_custom_emoji() {
                 name: "custom emoji".to_owned(),
                 wire_format: Some("<:gone:51>".to_owned()),
                 available: false,
+                available_as_link: false,
                 custom_image_url: Some("https://cdn.discordapp.com/emojis/51.png".to_owned()),
             },
             EmojiPickerEntry {
@@ -352,6 +353,7 @@ fn emoji_picker_lines_cross_out_unavailable_custom_emoji() {
                 name: "red heart".to_owned(),
                 wire_format: None,
                 available: true,
+                available_as_link: false,
                 custom_image_url: None,
             },
             EmojiPickerEntry {
@@ -360,6 +362,7 @@ fn emoji_picker_lines_cross_out_unavailable_custom_emoji() {
                 name: "custom emoji".to_owned(),
                 wire_format: Some("<:party_time:50>".to_owned()),
                 available: true,
+                available_as_link: true,
                 custom_image_url: Some("https://cdn.discordapp.com/emojis/50.png".to_owned()),
             },
         ],
@@ -386,15 +389,18 @@ fn emoji_picker_lines_cross_out_unavailable_custom_emoji() {
             .contains(Modifier::CROSSED_OUT)
     );
     assert!(
-        !lines[2]
-            .spans
-            .last()
-            .expect("custom emoji row should have a label span")
+        !lines[2].spans[2]
             .style
             .add_modifier
             .contains(Modifier::CROSSED_OUT)
     );
     assert_eq!(lines[2].spans[1].content.as_ref(), "   ");
+    assert_eq!(lines[2].spans[3].content.as_ref(), " - ");
+    assert_eq!(
+        lines[2].spans[4].content.as_ref(),
+        "available as image link"
+    );
+    assert_eq!(lines[2].spans[4].style.fg, Some(DIM));
 }
 
 #[test]

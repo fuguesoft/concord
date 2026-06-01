@@ -24,6 +24,11 @@ pub struct DisplayOptions {
     pub server_width: u16,
     pub channel_list_width: u16,
     pub member_list_width: u16,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ComposerOptions {
     pub emojis_as_links: bool,
 }
 
@@ -119,6 +124,7 @@ impl<'de> Deserialize<'de> for KeymapBinding {
 #[serde(default)]
 pub struct AppOptions {
     pub display: DisplayOptions,
+    pub composer: ComposerOptions,
     pub notifications: NotificationOptions,
     pub voice: VoiceOptions,
     pub ui_state: UiStateOptions,
@@ -299,6 +305,13 @@ impl Default for DisplayOptions {
             server_width: 20,
             channel_list_width: 24,
             member_list_width: 26,
+        }
+    }
+}
+
+impl Default for ComposerOptions {
+    fn default() -> Self {
+        Self {
             emojis_as_links: false,
         }
     }
@@ -438,9 +451,10 @@ mod tests {
     };
 
     use super::{
-        AppOptions, DisplayOptions, ImagePreviewQualityPreset, KeymapFileOptions, KeymapOptions,
-        MicrophoneSensitivityDb, NotificationOptions, VoiceOptions, VoiceVolumePercent,
-        load_keymap_options_from_path, load_options_from_path, save_options_to_path,
+        AppOptions, ComposerOptions, DisplayOptions, ImagePreviewQualityPreset, KeymapFileOptions,
+        KeymapOptions, MicrophoneSensitivityDb, NotificationOptions, VoiceOptions,
+        VoiceVolumePercent, load_keymap_options_from_path, load_options_from_path,
+        save_options_to_path,
     };
 
     #[test]
@@ -468,7 +482,6 @@ mod tests {
             server_width: 20,
             channel_list_width: 24,
             member_list_width: 26,
-            emojis_as_links: false,
         };
 
         assert!(!options.avatars_visible());
@@ -560,6 +573,15 @@ mod tests {
                 false,
                 MicrophoneSensitivityDb::default(),
             ),
+            (
+                "[composer]\nemojis_as_links = true\n",
+                false,
+                ImagePreviewQualityPreset::Balanced,
+                false,
+                false,
+                false,
+                MicrophoneSensitivityDb::default(),
+            ),
         ];
 
         for (
@@ -616,6 +638,10 @@ mod tests {
             assert_eq!(config.display.server_width, 20);
             assert_eq!(config.display.channel_list_width, 24);
             assert_eq!(config.display.member_list_width, 26);
+            assert_eq!(
+                config.composer.emojis_as_links,
+                toml.contains("emojis_as_links")
+            );
         }
     }
 
@@ -767,7 +793,9 @@ mod tests {
                 server_width: 12,
                 channel_list_width: 30,
                 member_list_width: 18,
-                emojis_as_links: false,
+            },
+            composer: ComposerOptions {
+                emojis_as_links: true,
             },
             notifications: NotificationOptions {
                 desktop_notifications: false,
