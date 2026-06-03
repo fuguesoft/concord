@@ -1,5 +1,7 @@
+use std::time::{Duration, Instant};
+
 use super::*;
-use crate::discord::AppCommand;
+use crate::discord::{AppCommand, MessageHistoryLoadTarget};
 
 #[test]
 fn message_creation_keeps_viewport_on_latest() {
@@ -210,6 +212,86 @@ fn incoming_message_while_scrolled_away_sets_new_messages_marker() {
     assert_eq!(state.new_messages_count(), 1);
     assert_eq!(state.message_extra_top_lines(5), 0);
     assert_eq!(state.channel_unread(Id::new(2)), ChannelUnreadState::Unread);
+    assert!(state.drain_pending_commands().is_empty());
+}
+
+#[test]
+fn recently_viewed_channel_does_not_force_stale_reload() {
+    let mut state = warm_state_with_message_channels();
+    let now = Instant::now();
+
+    state.activate_channel_at(Id::new(2), now);
+    state.activate_channel_at(Id::new(3), now + Duration::from_secs(1));
+    state.activate_channel_at(Id::new(2), now + Duration::from_secs(29 * 60));
+
+    assert!(!state.selected_message_history_needs_reload());
+}
+
+#[test]
+fn stale_reopen_reload_need_survives_failure_and_clears_after_success() {
+    let mut state = warm_state_with_message_channels();
+    let now = Instant::now();
+
+    state.activate_channel_at(Id::new(2), now);
+    state.activate_channel_at(Id::new(3), now + Duration::from_secs(1));
+    state.activate_channel_at(Id::new(2), now + Duration::from_secs(30 * 60 + 2));
+
+    assert!(state.selected_message_history_needs_reload());
+
+    state.push_event(AppEvent::MessageHistoryLoadFailed {
+        channel_id: Id::new(2),
+        target: MessageHistoryLoadTarget::Latest,
+        message: "temporary failure".to_owned(),
+    });
+    assert!(state.selected_message_history_needs_reload());
+
+    state.push_event(AppEvent::MessageHistoryRefreshed {
+        channel_id: Id::new(2),
+        messages: vec![message_info(Id::new(2), 30), message_info(Id::new(2), 31)],
+    });
+
+    assert!(!state.selected_message_history_needs_reload());
+    let message_ids = state
+        .messages()
+        .iter()
+        .map(|message| message.id)
+        .collect::<Vec<_>>();
+    assert_eq!(message_ids, vec![Id::new(30), Id::new(31)]);
+
+    state.activate_channel_at(Id::new(2), now + Duration::from_secs(30 * 60 + 3));
+    assert!(!state.selected_message_history_needs_reload());
+}
+
+fn warm_state_with_message_channels() -> DashboardState {
+    let mut state = state_with_many_channels(3);
+    state.push_event(latest_history_loaded(
+        Id::new(2),
+        vec![message_info(Id::new(2), 20)],
+    ));
+    state.push_event(latest_history_loaded(
+        Id::new(3),
+        vec![message_info(Id::new(3), 30)],
+    ));
+    state
+}
+
+#[test]
+fn catch_up_messages_while_scrolled_away_set_new_messages_marker() {
+    let mut state = state_with_messages(5);
+    clear_scheduled_read_ack(&mut state);
+    state.focus_pane(FocusPane::Messages);
+    state.set_message_view_height(3);
+    state.jump_top();
+
+    state.push_event(AppEvent::MessageHistoryCatchUpLoaded {
+        channel_id: Id::new(2),
+        after: Id::new(5),
+        messages: vec![message_info(Id::new(2), 7), message_info(Id::new(2), 6)],
+        has_more: false,
+    });
+
+    assert_eq!(state.new_messages_marker_message_id(), Some(Id::new(6)));
+    assert_eq!(state.new_messages_count(), 2);
     assert!(state.drain_pending_commands().is_empty());
 }
 
