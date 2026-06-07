@@ -102,9 +102,22 @@ pub(super) async fn run_dashboard(
     const BACKGROUND_REDRAW_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(80);
     let mut pending_redraw_deadline: Option<tokio::time::Instant> = None;
     let mut clipboard_paste_in_flight = false;
+    // Terminal image protocols mark image cells as skipped in ratatui's diff
+    // buffer. When a popup closes over an image, those skipped cells can keep
+    // old popup pixels. On overlay transitions, draw one image-free frame first
+    // so normal cells overwrite the stale image surface before images redraw.
+    let mut clear_image_surfaces_before_next_draw = false;
 
     while !state.should_quit() {
         if dirty {
+            if clear_image_surfaces_before_next_draw {
+                terminal.draw(|frame| {
+                    last_frame_area = frame.area();
+                    ui::sync_view_heights(frame.area(), &mut state);
+                    ui::render(frame, &state, Vec::new(), Vec::new(), Vec::new(), None);
+                })?;
+                clear_image_surfaces_before_next_draw = false;
+            }
             terminal.draw(|frame| {
                 last_frame_area = frame.area();
                 ui::sync_view_heights(frame.area(), &mut state);
@@ -215,7 +228,12 @@ pub(super) async fn run_dashboard(
                 match maybe_event {
                     Some(Ok(event)) => {
                         let before_signature = visible_dashboard_signature(&state);
-                        let image_previews_visible_before_event = !image_targets.is_empty();
+                        let image_surfaces_visible_before_event = image_surfaces_visible(
+                            &state,
+                            !image_targets.is_empty(),
+                            !avatar_targets.is_empty(),
+                            !emoji_targets.is_empty(),
+                        );
                         let outcome = events::handle_terminal_event(
                             &mut state,
                             event,
@@ -264,9 +282,12 @@ pub(super) async fn run_dashboard(
                         if should_refresh_image_protocols_after_visible_signature_change(
                             &before_signature,
                             &after_signature,
-                            image_previews_visible_before_event,
+                            image_surfaces_visible_before_event,
                         ) {
                             image_previews.refresh_protocols();
+                            avatar_images.refresh_protocols();
+                            emoji_images.refresh_protocols();
+                            clear_image_surfaces_before_next_draw = true;
                             dirty = true;
                         }
                         if outcome.dirty {

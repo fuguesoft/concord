@@ -23,6 +23,7 @@ pub(in crate::tui) struct AvatarImageCache {
     pub(super) entries: HashMap<String, AvatarImageEntry>,
     pub(super) active_popup_avatar_url: Option<String>,
     pub(super) tick: u64,
+    pub(super) protocol_generation: u64,
 }
 
 pub(super) enum AvatarImageEntry {
@@ -31,12 +32,17 @@ pub(super) enum AvatarImageEntry {
     },
     Ready {
         image: DynamicImage,
-        protocols: HashMap<AvatarProtocolKey, Protocol>,
+        protocols: HashMap<AvatarProtocolKey, AvatarProtocolEntry>,
         last_used: u64,
     },
     Failed {
         last_used: u64,
     },
+}
+
+pub(super) struct AvatarProtocolEntry {
+    protocol: Protocol,
+    protocol_generation: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -113,6 +119,7 @@ pub(in crate::tui) struct EmojiImageCache {
     pub(super) picker: Option<Picker>,
     pub(super) entries: HashMap<String, EmojiImageEntry>,
     pub(super) tick: u64,
+    pub(super) protocol_generation: u64,
 }
 
 pub(super) enum EmojiImageEntry {
@@ -120,7 +127,9 @@ pub(super) enum EmojiImageEntry {
         last_used: u64,
     },
     Ready {
+        image: DynamicImage,
         protocol: ratatui_image::protocol::Protocol,
+        protocol_generation: u64,
         last_used: u64,
     },
     Failed {
@@ -153,7 +162,12 @@ impl AvatarImageCache {
             entries: HashMap::new(),
             active_popup_avatar_url: None,
             tick: 0,
+            protocol_generation: 0,
         }
+    }
+
+    pub(in crate::tui) fn refresh_protocols(&mut self) {
+        self.protocol_generation = self.protocol_generation.saturating_add(1);
     }
 
     pub(in crate::tui) fn render_state_with_popup(
@@ -183,6 +197,7 @@ impl AvatarImageCache {
             let Some(picker) = self.picker.as_ref() else {
                 return (Vec::new(), None);
             };
+            let protocol_generation = self.protocol_generation;
 
             for target in targets {
                 let url =
@@ -194,11 +209,19 @@ impl AvatarImageCache {
                 else {
                     continue;
                 };
-                if !protocols.contains_key(&key)
+                if protocols
+                    .get(&key)
+                    .is_none_or(|entry| entry.protocol_generation != protocol_generation)
                     && let Some(protocol) =
                         clipped_preview_protocol(picker, image, key.render_info())
                 {
-                    protocols.insert(key, protocol);
+                    protocols.insert(
+                        key,
+                        AvatarProtocolEntry {
+                            protocol,
+                            protocol_generation,
+                        },
+                    );
                 }
             }
 
@@ -208,11 +231,19 @@ impl AvatarImageCache {
                 }) = self.entries.get_mut(url)
             {
                 let key = AvatarProtocolKey::profile_popup(circular);
-                if !protocols.contains_key(&key)
+                if protocols
+                    .get(&key)
+                    .is_none_or(|entry| entry.protocol_generation != protocol_generation)
                     && let Some(protocol) =
                         clipped_preview_protocol(picker, image, key.render_info())
                 {
-                    protocols.insert(key, protocol);
+                    protocols.insert(
+                        key,
+                        AvatarProtocolEntry {
+                            protocol,
+                            protocol_generation,
+                        },
+                    );
                 }
             }
         }
@@ -226,10 +257,10 @@ impl AvatarImageCache {
                     return None;
                 };
                 let key = AvatarProtocolKey::message_avatar(target, circular);
-                protocols.get(&key).map(|protocol| AvatarImage {
+                protocols.get(&key).map(|entry| AvatarImage {
                     row: target.row,
                     visible_height: target.visible_height,
-                    protocol,
+                    protocol: &entry.protocol,
                 })
             })
             .collect();
@@ -238,10 +269,10 @@ impl AvatarImageCache {
                 return None;
             };
             let key = AvatarProtocolKey::profile_popup(circular);
-            protocols.get(&key).map(|protocol| AvatarImage {
+            protocols.get(&key).map(|entry| AvatarImage {
                 row: 0,
                 visible_height: PROFILE_POPUP_AVATAR_HEIGHT,
-                protocol,
+                protocol: &entry.protocol,
             })
         });
 
@@ -388,7 +419,12 @@ impl EmojiImageCache {
             picker: query_image_picker("emoji", "emoji image picker unavailable"),
             entries: HashMap::new(),
             tick: 0,
+            protocol_generation: 0,
         }
+    }
+
+    pub(in crate::tui) fn refresh_protocols(&mut self) {
+        self.protocol_generation = self.protocol_generation.saturating_add(1);
     }
 
     /// Returns decoded protocols for visible targets and refreshes their
@@ -398,9 +434,24 @@ impl EmojiImageCache {
         targets: &[EmojiImageTarget],
     ) -> Vec<EmojiImage<'_>> {
         let touch_tick = self.next_tick();
+        let picker = self.picker.clone();
+        let protocol_generation = self.protocol_generation;
         for target in targets {
             if let Some(entry) = self.entries.get_mut(&target.url) {
                 entry.touch(touch_tick);
+                if let EmojiImageEntry::Ready {
+                    image,
+                    protocol,
+                    protocol_generation: entry_protocol_generation,
+                    ..
+                } = entry
+                    && *entry_protocol_generation != protocol_generation
+                    && let Some(picker) = picker.as_ref()
+                    && let Some(updated_protocol) = emoji_protocol(picker, image.clone())
+                {
+                    *protocol = updated_protocol;
+                    *entry_protocol_generation = protocol_generation;
+                }
             }
         }
         targets
@@ -494,12 +545,14 @@ impl EmojiImageCache {
         };
 
         match image::load_from_memory(bytes) {
-            Ok(img) => match emoji_protocol(picker, img) {
+            Ok(img) => match emoji_protocol(picker, img.clone()) {
                 Some(protocol) => {
                     self.entries.insert(
                         url.to_owned(),
                         EmojiImageEntry::Ready {
+                            image: img,
                             protocol,
+                            protocol_generation: self.protocol_generation,
                             last_used,
                         },
                     );

@@ -260,13 +260,13 @@ mod tests {
     }
 
     #[test]
-    fn overlay_changes_refresh_image_protocols_when_images_are_visible() {
+    fn overlay_changes_refresh_image_protocols_when_image_surfaces_are_visible() {
         let mut state = state_with_messages(1);
         push_image_message(&mut state, 2);
         state.focus_pane(FocusPane::Messages);
         let before = visible_dashboard_signature(&state);
 
-        state.open_selected_message_actions();
+        state.open_channel_switcher();
         let open = visible_dashboard_signature(&state);
 
         assert_ne!(before, open);
@@ -277,7 +277,7 @@ mod tests {
             !should_refresh_image_protocols_after_visible_signature_change(&before, &open, false)
         );
 
-        state.close_message_action_menu();
+        state.close_channel_switcher();
         let closed = visible_dashboard_signature(&state);
 
         assert_ne!(open, closed);

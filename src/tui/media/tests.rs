@@ -594,6 +594,7 @@ fn avatar_image_cache_evicts_least_recently_used_when_over_capacity() {
         entries: HashMap::new(),
         active_popup_avatar_url: None,
         tick: 0,
+        protocol_generation: 0,
     };
     for id in 0..MAX_AVATAR_IMAGE_CACHE_ENTRIES {
         let url = avatar_preview_url(
@@ -669,6 +670,7 @@ fn avatar_popup_request_prunes_cache_to_limit() {
         entries: HashMap::new(),
         active_popup_avatar_url: None,
         tick: 0,
+        protocol_generation: 0,
     };
     for id in 0..MAX_AVATAR_IMAGE_CACHE_ENTRIES {
         cache.entries.insert(
@@ -702,6 +704,7 @@ fn avatar_popup_upload_request_uses_local_preview_command() {
         entries: HashMap::new(),
         active_popup_avatar_url: None,
         tick: 0,
+        protocol_generation: 0,
     };
     let upload = ProfileAvatarUpload::from_bytes("avatar.png".to_owned(), vec![1, 2, 3]);
 
@@ -725,6 +728,7 @@ fn avatar_cache_pruning_preserves_active_popup_avatar() {
         entries: HashMap::new(),
         active_popup_avatar_url: Some(popup_url.to_owned()),
         tick: 0,
+        protocol_generation: 0,
     };
     for id in 0..MAX_AVATAR_IMAGE_CACHE_ENTRIES {
         let url = avatar_preview_url(
@@ -999,18 +1003,35 @@ fn image_preview_request_is_created_for_draw_target() {
 }
 
 #[test]
-fn image_preview_refresh_protocols_advances_generation() {
-    let mut cache = ImagePreviewCache {
+fn image_surface_refresh_protocols_advances_generation() {
+    let mut previews = ImagePreviewCache {
         picker: None,
         entries: HashMap::new(),
         tick: 0,
         decode_generation: 0,
         protocol_generation: 0,
     };
+    let mut avatars = AvatarImageCache {
+        picker: None,
+        entries: HashMap::new(),
+        active_popup_avatar_url: None,
+        tick: 0,
+        protocol_generation: 0,
+    };
+    let mut emojis = EmojiImageCache {
+        picker: None,
+        entries: HashMap::new(),
+        tick: 0,
+        protocol_generation: 0,
+    };
 
-    cache.refresh_protocols();
+    previews.refresh_protocols();
+    avatars.refresh_protocols();
+    emojis.refresh_protocols();
 
-    assert_eq!(cache.protocol_generation, 1);
+    assert_eq!(previews.protocol_generation, 1);
+    assert_eq!(avatars.protocol_generation, 1);
+    assert_eq!(emojis.protocol_generation, 1);
 }
 
 #[test]
@@ -1653,6 +1674,7 @@ fn emoji_image_cache_skips_requests_without_image_protocol() {
         picker: None,
         entries: HashMap::new(),
         tick: 0,
+        protocol_generation: 0,
     };
     let target = EmojiImageTarget {
         url: "https://cdn.discordapp.com/emojis/50.png".to_owned(),
@@ -1670,6 +1692,7 @@ fn emoji_image_cache_evicts_least_recently_used_when_over_capacity() {
         picker: None,
         entries: HashMap::new(),
         tick: 0,
+        protocol_generation: 0,
     };
     for id in 0..MAX_EMOJI_IMAGE_CACHE_ENTRIES {
         cache.entries.insert(
