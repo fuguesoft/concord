@@ -404,12 +404,8 @@ When the composer input starts with a slash `/`, the command suggestion popup
 ## Configuration
 
 Concord options are stored under Concord's config directory. If
-`XDG_CONFIG_HOME` is set, Concord uses `$XDG_CONFIG_HOME/concord/config.toml`
-for app options and `$XDG_CONFIG_HOME/concord/keymap.toml` for key settings.
-Otherwise it uses the platform config directory. The usual fallback is
-`~/.config/concord/config.toml` and `~/.config/concord/keymap.toml` on Linux,
-matching files under `~/Library/Application Support/concord/` on macOS, and the
-roaming AppData config directory on Windows.
+`XDG_CONFIG_HOME` is set, Concord uses `config.toml` for app options and `keymap.toml` for key settings.
+Otherwise it uses the platform config directory.
 
 Local UI state and plaintext fallback credentials are stored under Concord's
 state directory instead. If `XDG_STATE_HOME` is set, Concord uses
