@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use reqwest::{StatusCode, header::AUTHORIZATION};
+use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::discord::ids::{
@@ -124,12 +124,10 @@ impl DiscordRest {
         sort_by: ForumSearchSort,
     ) -> Result<ForumPostPage> {
         let response = self
-            .raw_http
-            .get(format!(
+            .authenticated(self.raw_http.get(format!(
                 "https://discord.com/api/v9/channels/{}/threads/search",
                 channel_id.get()
-            ))
-            .header(AUTHORIZATION, &self.token)
+            )))
             .query(&[
                 ("archived", archive_state.as_query_value().to_owned()),
                 ("sort_by", sort_by.as_str().to_owned()),

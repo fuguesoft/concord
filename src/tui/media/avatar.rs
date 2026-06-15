@@ -11,7 +11,9 @@ use crate::{
 use super::{
     AVATAR_PREVIEW_HEIGHT, AVATAR_PREVIEW_WIDTH, AvatarTarget, ImagePreviewRenderInfo,
     PROFILE_POPUP_AVATAR_HEIGHT, PROFILE_POPUP_AVATAR_WIDTH, avatar_preview_url,
-    clipped_preview_protocol, lru, query_image_picker,
+    clipped_preview_protocol,
+    decode::{MediaImageDecodeJob, MediaImageDecodeKey},
+    lru, query_image_picker,
 };
 
 /// Avatar images are small on screen but decoded originals can still add up
@@ -23,11 +25,16 @@ pub(in crate::tui) struct AvatarImageCache {
     pub(super) entries: HashMap<String, AvatarImageEntry>,
     pub(super) active_popup_avatar_url: Option<String>,
     pub(super) tick: u64,
+    pub(super) decode_generation: u64,
     pub(super) protocol_generation: u64,
 }
 
 pub(super) enum AvatarImageEntry {
     Loading {
+        last_used: u64,
+    },
+    Decoding {
+        generation: u64,
         last_used: u64,
     },
     Ready {
@@ -97,6 +104,7 @@ impl AvatarImageEntry {
     fn last_used(&self) -> u64 {
         match self {
             AvatarImageEntry::Loading { last_used }
+            | AvatarImageEntry::Decoding { last_used, .. }
             | AvatarImageEntry::Ready { last_used, .. }
             | AvatarImageEntry::Failed { last_used } => *last_used,
         }
@@ -105,6 +113,7 @@ impl AvatarImageEntry {
     fn touch(&mut self, tick: u64) {
         match self {
             AvatarImageEntry::Loading { last_used }
+            | AvatarImageEntry::Decoding { last_used, .. }
             | AvatarImageEntry::Ready { last_used, .. }
             | AvatarImageEntry::Failed { last_used } => *last_used = tick,
         }
@@ -118,6 +127,7 @@ impl AvatarImageCache {
             entries: HashMap::new(),
             active_popup_avatar_url: None,
             tick: 0,
+            decode_generation: 0,
             protocol_generation: 0,
         }
     }
@@ -288,30 +298,72 @@ impl AvatarImageCache {
         })
     }
 
-    pub(in crate::tui) fn record_event(&mut self, event: &AppEvent) {
+    pub(in crate::tui) fn record_event(&mut self, event: &AppEvent) -> Option<MediaImageDecodeJob> {
         match event {
             AppEvent::AttachmentPreviewLoaded { url, bytes } => self.store_loaded(url, bytes),
-            AppEvent::AttachmentPreviewLoadFailed { url, .. } => self.store_failed(url),
-            _ => {}
+            AppEvent::AttachmentPreviewLoadFailed { url, .. } => {
+                self.store_failed(url);
+                None
+            }
+            _ => None,
         }
     }
 
-    fn store_loaded(&mut self, url: &str, bytes: &[u8]) {
-        if !self.entries.contains_key(url) {
-            return;
+    fn store_loaded(&mut self, url: &str, bytes: &[u8]) -> Option<MediaImageDecodeJob> {
+        if !matches!(
+            self.entries.get(url),
+            Some(AvatarImageEntry::Loading { .. })
+        ) {
+            return None;
         }
         let last_used = lru::next_tick(&mut self.tick);
 
         if self.picker.is_none() {
             self.entries
                 .insert(url.to_owned(), AvatarImageEntry::Failed { last_used });
+            return None;
+        }
+
+        let generation = self.next_decode_generation();
+        self.entries.insert(
+            url.to_owned(),
+            AvatarImageEntry::Decoding {
+                generation,
+                last_used,
+            },
+        );
+        Some(MediaImageDecodeJob {
+            key: MediaImageDecodeKey::Avatar(url.to_owned()),
+            generation,
+            bytes: std::sync::Arc::from(bytes.to_vec()),
+        })
+    }
+
+    pub(in crate::tui) fn store_decoded(
+        &mut self,
+        key: String,
+        result_generation: u64,
+        result: std::result::Result<DynamicImage, String>,
+    ) {
+        let Some(generation) = self.entries.get(&key).and_then(|entry| {
+            if let AvatarImageEntry::Decoding { generation, .. } = entry {
+                Some(*generation)
+            } else {
+                None
+            }
+        }) else {
+            return;
+        };
+
+        if generation != result_generation {
             return;
         }
 
-        match image::load_from_memory(bytes) {
+        let last_used = lru::next_tick(&mut self.tick);
+        match result {
             Ok(image) => {
                 self.entries.insert(
-                    url.to_owned(),
+                    key,
                     AvatarImageEntry::Ready {
                         image,
                         protocols: HashMap::new(),
@@ -321,9 +373,14 @@ impl AvatarImageCache {
             }
             Err(_) => {
                 self.entries
-                    .insert(url.to_owned(), AvatarImageEntry::Failed { last_used });
+                    .insert(key, AvatarImageEntry::Failed { last_used });
             }
         }
+    }
+
+    fn next_decode_generation(&mut self) -> u64 {
+        self.decode_generation = self.decode_generation.saturating_add(1);
+        self.decode_generation
     }
 
     fn store_failed(&mut self, url: &str) {

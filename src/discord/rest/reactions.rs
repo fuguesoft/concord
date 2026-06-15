@@ -1,4 +1,3 @@
-use reqwest::header::AUTHORIZATION;
 use serde_json::Value;
 
 use crate::discord::ids::{
@@ -6,7 +5,7 @@ use crate::discord::ids::{
     marker::{ChannelMarker, MessageMarker, UserMarker},
 };
 use crate::{
-    AppError, Result,
+    Result,
     discord::{ReactionEmoji, ReactionUserInfo},
 };
 
@@ -22,22 +21,16 @@ impl DiscordRest {
         message_id: Id<MessageMarker>,
         emoji: &ReactionEmoji,
     ) -> Result<()> {
-        self.raw_http
-            .put(format!(
+        self.send_unit(
+            self.raw_http.put(format!(
                 "https://discord.com/api/v9/channels/{}/messages/{}/reactions/{}/@me",
                 channel_id.get(),
                 message_id.get(),
                 reaction_route_component(emoji)
-            ))
-            .header(AUTHORIZATION, &self.token)
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("add reaction request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("add reaction failed: {error}")))?;
-        Ok(())
+            )),
+            "add reaction",
+        )
+        .await
     }
 
     pub async fn remove_current_user_reaction(
@@ -46,24 +39,16 @@ impl DiscordRest {
         message_id: Id<MessageMarker>,
         emoji: &ReactionEmoji,
     ) -> Result<()> {
-        self.raw_http
-            .delete(format!(
+        self.send_unit(
+            self.raw_http.delete(format!(
                 "https://discord.com/api/v9/channels/{}/messages/{}/reactions/{}/@me",
                 channel_id.get(),
                 message_id.get(),
                 reaction_route_component(emoji)
-            ))
-            .header(AUTHORIZATION, &self.token)
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("remove reaction request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("remove reaction failed: {error}"))
-            })?;
-        Ok(())
+            )),
+            "remove reaction",
+        )
+        .await
     }
 
     pub async fn load_reaction_users(
@@ -85,7 +70,6 @@ impl DiscordRest {
                     message_id.get(),
                     reaction_route_component(emoji)
                 ))
-                .header(AUTHORIZATION, &self.token)
                 .query(&[
                     ("limit", REACTION_USERS_PAGE_LIMIT.to_string()),
                     ("type", "0".to_owned()),
@@ -94,21 +78,7 @@ impl DiscordRest {
                 request = request.query(&[("after", user_id.to_string())]);
             }
 
-            let page: Vec<Value> = request
-                .send()
-                .await
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!("reaction users request failed: {error}"))
-                })?
-                .error_for_status()
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!("reaction users failed: {error}"))
-                })?
-                .json()
-                .await
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!("reaction users decode failed: {error}"))
-                })?;
+            let page: Vec<Value> = self.send_json(request, "reaction users").await?;
             let parsed_page: Vec<ReactionUserInfo> = page
                 .iter()
                 .filter_map(reaction_user_info_from_raw)

@@ -8,6 +8,7 @@ use crate::discord::{
 };
 use crate::logging;
 
+mod channel_tree;
 mod channels;
 mod composer;
 mod dashboard;

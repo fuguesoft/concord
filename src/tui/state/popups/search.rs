@@ -9,7 +9,7 @@ use crate::discord::{
 use crate::tui::fuzzy::{best_fuzzy_name_match_score, fuzzy_text_score};
 use crate::tui::keybindings::SelectionAction;
 use crate::tui::state::popups::{ActiveModalPopupKind, ModalPopup, SelectablePopupState};
-use crate::tui::text_cursor::{clamp_cursor_index, next_char_boundary, previous_char_boundary};
+use crate::tui::text_input::TextInputState;
 use chrono::NaiveDate;
 
 use super::super::{
@@ -42,8 +42,7 @@ enum SearchFieldSelection {
 struct SearchTextField {
     label: &'static str,
     placeholder: &'static str,
-    value: String,
-    cursor_byte_index: usize,
+    input: TextInputState,
     selection: Option<SearchFieldSelection>,
 }
 
@@ -52,42 +51,36 @@ impl SearchTextField {
         Self {
             label,
             placeholder,
-            value: String::new(),
-            cursor_byte_index: 0,
+            input: TextInputState::default(),
             selection: None,
         }
     }
 
     fn cursor(&self) -> usize {
-        clamp_cursor_index(&self.value, self.cursor_byte_index)
+        self.input.cursor_byte_index()
+    }
+
+    fn value(&self) -> &str {
+        self.input.value()
     }
 
     fn push_char(&mut self, value: char) {
-        let cursor = self.cursor();
-        self.value.insert(cursor, value);
-        self.cursor_byte_index = cursor + value.len_utf8();
+        self.input.insert_char(value);
         self.selection = None;
     }
 
     fn pop_char(&mut self) {
-        let cursor = self.cursor();
-        if cursor == 0 {
-            return;
+        if self.input.delete_previous_grapheme() {
+            self.selection = None;
         }
-        let start = previous_char_boundary(&self.value, cursor);
-        self.value.replace_range(start..cursor, "");
-        self.cursor_byte_index = start;
-        self.selection = None;
     }
 
     fn cursor_left(&mut self) {
-        let cursor = self.cursor();
-        self.cursor_byte_index = previous_char_boundary(&self.value, cursor);
+        self.input.move_left();
     }
 
     fn cursor_right(&mut self) {
-        let cursor = self.cursor();
-        self.cursor_byte_index = next_char_boundary(&self.value, cursor);
+        self.input.move_right();
     }
 }
 
@@ -156,7 +149,7 @@ impl SearchPopupState {
         self.fields
             .iter()
             .find(|field| field.label == label)
-            .map(|field| field.value.trim())
+            .map(|field| field.value().trim())
             .filter(|value| !value.is_empty())
     }
 
@@ -198,7 +191,7 @@ impl SearchPopupState {
                 .enumerate()
                 .map(|(index, field)| SearchFieldView {
                     label: field.label.to_owned(),
-                    value: field.value.clone(),
+                    value: field.value().to_owned(),
                     placeholder: field.placeholder.to_owned(),
                     active: index == self.active_field,
                     cursor: field.cursor(),
@@ -425,7 +418,7 @@ impl DashboardState {
             SearchPopupMode::Member => search.field_value("member"),
             SearchPopupMode::Message => {
                 let field = search.fields.get(search.active_field)?;
-                let value = field.value.trim();
+                let value = field.value().trim();
                 (matches!(field.label, "from" | "mentions")
                     && !value.is_empty()
                     && field.selection.is_none()
@@ -513,8 +506,7 @@ impl DashboardState {
         if let Some(search) = self.popups.search_popup_mut()
             && let Some(field) = search.active_field_mut()
         {
-            field.value = replacement;
-            field.cursor_byte_index = field.value.len();
+            field.input.set_value(replacement);
             field.selection = Some(selection);
             search.suggestions.clear();
             search.suggestion_selection.select(0);
@@ -611,7 +603,7 @@ impl DashboardState {
         if !search
             .fields
             .iter()
-            .any(|field| !field.value.trim().is_empty())
+            .any(|field| !field.value().trim().is_empty())
         {
             return Some("Enter at least one search filter".to_owned());
         }
@@ -698,7 +690,7 @@ impl DashboardState {
                 return None;
             }
             let field = search.fields.get(search.active_field)?;
-            let value = field.value.trim();
+            let value = field.value().trim();
             if value.is_empty() || field.selection.is_some() {
                 return None;
             }

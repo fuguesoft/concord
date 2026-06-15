@@ -1,5 +1,5 @@
 use chrono::{NaiveDate, TimeZone, Utc};
-use reqwest::{StatusCode, header::AUTHORIZATION};
+use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::{
@@ -41,9 +41,7 @@ impl DiscordRest {
         };
         let params = message_search_query_params(&query);
         let response = self
-            .raw_http
-            .get(endpoint)
-            .header(AUTHORIZATION, &self.token)
+            .authenticated(self.raw_http.get(endpoint))
             .query(&params)
             .send()
             .await

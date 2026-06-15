@@ -12,14 +12,16 @@ use tokio::sync::mpsc;
 
 use crate::{
     config::NotificationOptions,
-    discord::{AppEvent, DiscordClient, SequencedAppEvent, VoiceSoundKind},
+    discord::{
+        AppEvent, ChannelInfo, DiscordClient, MessageInfo, SequencedAppEvent, VoiceSoundKind,
+    },
     logging,
 };
 
 use super::super::{
     media::{
-        AvatarImageCache, EmojiImageCache, ImagePreviewCache, ImagePreviewDecodeResult,
-        spawn_image_preview_decode,
+        AvatarImageCache, EmojiImageCache, ImagePreviewCache, MediaImageDecodeResult,
+        spawn_media_image_decode,
     },
     state::{DashboardState, DesktopNotification},
 };
@@ -33,7 +35,7 @@ pub(in crate::tui) struct EffectContext<'a> {
     pub(in crate::tui) image_previews: &'a mut ImagePreviewCache,
     pub(in crate::tui) avatar_images: &'a mut AvatarImageCache,
     pub(in crate::tui) emoji_images: &'a mut EmojiImageCache,
-    pub(in crate::tui) preview_decode_tx: &'a mpsc::UnboundedSender<ImagePreviewDecodeResult>,
+    pub(in crate::tui) media_decode_tx: &'a mpsc::UnboundedSender<MediaImageDecodeResult>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -81,7 +83,20 @@ pub(super) fn process_effect_event(
     ctx: &mut EffectContext<'_>,
 ) -> EffectProcessingOutcome {
     let outcome = EffectProcessingOutcome::processed(&event);
-    let member_hydration_messages = match &event {
+    let member_hydration_messages = member_hydration_messages_for_event(&event);
+    let thread_owner_hydration_infos = thread_owner_hydration_infos_for_event(&event);
+
+    dispatch_runtime_side_effects(&event, ctx);
+    record_media_event(&event, ctx);
+    push_dashboard_effect(event, ctx);
+    enqueue_missing_message_author_requests(member_hydration_messages, ctx);
+    enqueue_missing_thread_owner_requests(thread_owner_hydration_infos, ctx);
+
+    outcome
+}
+
+fn member_hydration_messages_for_event(event: &AppEvent) -> Option<Vec<MessageInfo>> {
+    match event {
         AppEvent::MessageHistoryLoaded { messages, .. }
         | AppEvent::MessageHistoryRefreshed { messages, .. }
         | AppEvent::MessageHistoryAfterLoaded { messages, .. }
@@ -96,49 +111,77 @@ pub(super) fn process_effect_event(
             ..
         } => Some(messages.clone()),
         _ => None,
-    };
-    let thread_owner_hydration_infos = match &event {
+    }
+}
+
+fn thread_owner_hydration_infos_for_event(event: &AppEvent) -> Option<Vec<ChannelInfo>> {
+    match event {
         AppEvent::ForumPostsLoaded { threads, .. } => Some(threads.clone()),
         _ => None,
-    };
-    if let Some(notification) = ctx.state.desktop_notification_for_event(&event) {
+    }
+}
+
+fn dispatch_runtime_side_effects(event: &AppEvent, ctx: &EffectContext<'_>) {
+    if let Some(notification) = ctx.state.desktop_notification_for_event(event) {
         dispatch_desktop_notification(notification, ctx.state.desktop_notification_icon());
     }
     if let AppEvent::VoiceSound { kind } = event {
-        dispatch_voice_sound(kind, ctx.state.notification_options());
+        dispatch_voice_sound(*kind, ctx.state.notification_options());
     }
-    for job in ctx.image_previews.record_event(&event) {
-        spawn_image_preview_decode(job, ctx.preview_decode_tx.clone());
+}
+
+fn record_media_event(event: &AppEvent, ctx: &mut EffectContext<'_>) {
+    let preview_jobs = ctx.image_previews.record_event(event);
+    for job in preview_jobs
+        .into_iter()
+        .chain(ctx.avatar_images.record_event(event))
+        .chain(ctx.emoji_images.record_event(event))
+    {
+        spawn_media_image_decode(job, ctx.media_decode_tx.clone());
     }
-    ctx.avatar_images.record_event(&event);
-    ctx.emoji_images.record_event(&event);
+}
+
+fn push_dashboard_effect(event: AppEvent, ctx: &mut EffectContext<'_>) {
     if matches!(event, AppEvent::GatewayClosed) {
         handle_gateway_closed(ctx.state);
-    } else {
-        if matches!(
-            event,
-            AppEvent::GatewayResumed | AppEvent::GatewayReidentified
-        ) && let Some(command) = ctx.state.selected_message_history_catch_up_command()
-        {
-            ctx.state.enqueue_pending_command(command);
-        }
-        ctx.state.push_effect(event);
+        return;
     }
-    if let Some(messages) = member_hydration_messages {
-        let missing = ctx.state.missing_message_author_member_requests(&messages);
-        let requests = ctx
-            .client
-            .next_message_author_member_requests(missing, std::time::Instant::now());
-        ctx.state.enqueue_message_author_member_requests(requests);
+    if matches!(
+        event,
+        AppEvent::GatewayResumed | AppEvent::GatewayReidentified
+    ) && let Some(command) = ctx.state.selected_message_history_catch_up_command()
+    {
+        ctx.state.enqueue_pending_command(command);
     }
-    if let Some(threads) = thread_owner_hydration_infos {
-        let missing = ctx.state.missing_thread_owner_member_requests(&threads);
-        let requests = ctx
-            .client
-            .next_message_author_member_requests(missing, std::time::Instant::now());
-        ctx.state.enqueue_message_author_member_requests(requests);
-    }
-    outcome
+    ctx.state.push_effect(event);
+}
+
+fn enqueue_missing_message_author_requests(
+    messages: Option<Vec<MessageInfo>>,
+    ctx: &mut EffectContext<'_>,
+) {
+    let Some(messages) = messages else {
+        return;
+    };
+    let missing = ctx.state.missing_message_author_member_requests(&messages);
+    let requests = ctx
+        .client
+        .next_message_author_member_requests(missing, std::time::Instant::now());
+    ctx.state.enqueue_message_author_member_requests(requests);
+}
+
+fn enqueue_missing_thread_owner_requests(
+    threads: Option<Vec<ChannelInfo>>,
+    ctx: &mut EffectContext<'_>,
+) {
+    let Some(threads) = threads else {
+        return;
+    };
+    let missing = ctx.state.missing_thread_owner_member_requests(&threads);
+    let requests = ctx
+        .client
+        .next_message_author_member_requests(missing, std::time::Instant::now());
+    ctx.state.enqueue_message_author_member_requests(requests);
 }
 
 fn dispatch_desktop_notification(notification: DesktopNotification, icon: Option<String>) {
@@ -535,14 +578,14 @@ mod tests {
         let mut image_previews = ImagePreviewCache::new();
         let mut avatar_images = AvatarImageCache::new();
         let mut emoji_images = EmojiImageCache::new();
-        let (preview_decode_tx, _preview_decode_rx) = mpsc::unbounded_channel();
+        let (media_decode_tx, _media_decode_rx) = mpsc::unbounded_channel();
         let mut ctx = EffectContext {
             state,
             client: &client,
             image_previews: &mut image_previews,
             avatar_images: &mut avatar_images,
             emoji_images: &mut emoji_images,
-            preview_decode_tx: &preview_decode_tx,
+            media_decode_tx: &media_decode_tx,
         };
 
         process_effect_event(event, &mut ctx);

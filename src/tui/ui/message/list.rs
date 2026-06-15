@@ -5,8 +5,9 @@ use super::super::panes::{
 };
 use super::super::*;
 use crate::tui::media;
-use crate::tui::message::time::{
-    format_message_local_time, message_local_date, message_local_datetime,
+use crate::tui::message::{
+    layout::{MessageViewportPlan, MessageViewportRow},
+    time::{format_message_local_time, message_local_date, message_local_datetime},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,6 +31,17 @@ struct MessageItemLinesInput<'a> {
     line_offset: usize,
 }
 
+struct MessageRenderPlan<'a, 'p> {
+    rows: &'p MessageViewportPlan<'a>,
+    layout: MessageViewportLayout,
+}
+
+impl<'a> MessageRenderPlan<'a, '_> {
+    fn row(&self, local_index: usize) -> Option<&MessageViewportRow<'a>> {
+        self.rows.row(local_index)
+    }
+}
+
 pub(in crate::tui::ui) fn render_messages(
     frame: &mut Frame,
     area: Rect,
@@ -37,6 +49,7 @@ pub(in crate::tui::ui) fn render_messages(
     image_previews: Vec<ImagePreview<'_>>,
     avatar_images: Vec<AvatarImage<'_>>,
     emoji_images: &[EmojiImage<'_>],
+    viewport_plan: Option<&MessageViewportPlan<'_>>,
 ) {
     let block = panel_block_owned(
         state.message_pane_title(),
@@ -118,31 +131,33 @@ pub(in crate::tui::ui) fn render_messages(
     let selected_card_width =
         selected_message_card_width(message_areas.list.width as usize, message_scrollbar_visible);
     let loaded_custom_emoji_urls = loaded_custom_emoji_urls(emoji_images);
-    let lines = message_viewport_lines(
-        &messages,
-        selected,
-        state,
-        MessageViewportLayout {
-            content_width,
-            list_width: message_areas.list.width as usize,
-            selected_card_width,
-            preview_width,
-            max_preview_height,
-        },
-        &loaded_custom_emoji_urls,
-    );
+    let layout = MessageViewportLayout {
+        content_width,
+        list_width: message_areas.list.width as usize,
+        selected_card_width,
+        preview_width,
+        max_preview_height,
+    };
+    let owned_plan;
+    let rows = if let Some(viewport_plan) = viewport_plan {
+        viewport_plan
+    } else {
+        owned_plan = MessageViewportPlan::new(
+            &messages,
+            selected,
+            state,
+            layout.content_width,
+            layout.preview_width,
+            layout.max_preview_height,
+        );
+        &owned_plan
+    };
+    let render_plan = MessageRenderPlan { rows, layout };
+    let lines = message_viewport_lines_from_plan(&render_plan, state, &loaded_custom_emoji_urls);
 
     frame.render_widget(Paragraph::new(lines), message_areas.list);
-    let selected_avatar_body_top = selected.and_then(|selected| {
-        message_body_top_row(
-            &messages,
-            state,
-            selected,
-            content_width,
-            preview_width,
-            max_preview_height,
-        )
-    });
+    let selected_avatar_body_top =
+        selected.and_then(|selected| render_plan.row(selected).map(|row| row.body_top));
     for avatar in avatar_images {
         if let Some(area) = message_avatar_area(
             message_areas.list,
@@ -153,47 +168,30 @@ pub(in crate::tui::ui) fn render_messages(
             frame.render_widget(RatatuiImage::new(avatar.protocol), area);
         }
     }
-    render_inline_reaction_emojis(
-        frame,
-        message_areas.list,
-        &messages,
-        state,
-        content_width,
-        selected,
-        emoji_images,
-    );
+    render_inline_reaction_emojis(frame, message_areas.list, &render_plan, emoji_images);
     render_inline_message_body_emojis(
         frame,
         message_areas.list,
-        &messages,
+        &render_plan,
         state,
-        content_width,
-        selected,
         emoji_images,
         &loaded_custom_emoji_urls,
     );
     for image_preview in image_previews.into_iter() {
-        let preview_rows_before_cell = inline_preview_rows_before_message(
-            &messages,
-            image_preview.message_index,
-            preview_width,
-            max_preview_height,
-        )
-        .saturating_add(image_preview.preview_y_offset_rows);
-        let row = inline_image_preview_row(
-            &messages,
-            state,
-            image_preview.message_index,
-            content_width,
-            state.message_line_scroll(),
-            preview_rows_before_cell,
-        );
+        let Some(row_plan) = render_plan.row(image_preview.message_index) else {
+            continue;
+        };
+        let row = row_plan
+            .body_top
+            .saturating_add(row_plan.metrics.body_rows() as isize)
+            .saturating_add(image_preview.preview_y_offset_rows as isize)
+            .saturating_sub(1);
         if let Some(preview_area) = inline_image_preview_area(
             message_areas.list,
             row,
-            image_preview.preview_x_offset_columns.saturating_add(
-                selected_message_content_x_offset(selected == Some(image_preview.message_index)),
-            ),
+            image_preview
+                .preview_x_offset_columns
+                .saturating_add(selected_message_content_x_offset(row_plan.selected)),
             image_preview.preview_width,
             image_preview.preview_height,
             image_preview.accent_color,
@@ -219,6 +217,91 @@ pub(in crate::tui::ui) fn render_messages(
     render_composer_command_picker(frame, message_areas, state);
     render_composer_mention_picker(frame, message_areas, state);
     render_composer_emoji_picker(frame, message_areas, state, emoji_images);
+}
+
+fn message_viewport_lines_from_plan(
+    plan: &MessageRenderPlan<'_, '_>,
+    state: &DashboardState,
+    loaded_custom_emoji_urls: &[String],
+) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for row in plan.rows.rows() {
+        let author = row.message.author.clone();
+        let author_style = message_author_style(state.message_author_role_color(row.message));
+        let mut top_lines = Vec::new();
+        if row.starts_new_day {
+            top_lines.push(date_separator_line(row.message.id, plan.layout.list_width));
+        }
+        if row.shows_unread_divider {
+            top_lines.push(unread_divider_line(plan.layout.list_width));
+        }
+        for line in top_lines.into_iter().skip(row.line_offset) {
+            lines.push(line);
+        }
+
+        let (content, reactions) = format_message_content_sections_with_loaded_custom_emoji_urls(
+            row.message,
+            state,
+            plan.layout.content_width.max(8),
+            loaded_custom_emoji_urls,
+        );
+
+        let sent_time = format_message_sent_time(row.message.id);
+        let preview_spacers = inline_preview_spacers_for_message(
+            row.message,
+            plan.layout.preview_width,
+            plan.layout.max_preview_height,
+        );
+        let item_lines = message_item_lines_with_previews(MessageItemLinesInput {
+            author,
+            author_style,
+            author_is_bot: row.message.author_is_bot,
+            sent_time: sent_time.clone(),
+            show_header: row.show_header,
+            content,
+            reactions,
+            content_width: plan.layout.content_width,
+            preview_spacers: &preview_spacers,
+            bottom_gap: row.bottom_gap,
+            line_offset: row.item_line_offset,
+        });
+        if row.selected {
+            lines.extend(selected_message_lines(
+                item_lines,
+                &sent_time,
+                plan.layout.selected_card_width,
+                row.body_skip == 0,
+                row.bottom_gap,
+                row.show_header,
+            ));
+        } else {
+            lines.extend(item_lines);
+        }
+    }
+    lines
+}
+
+#[cfg(test)]
+pub(in crate::tui::ui) fn message_viewport_lines(
+    messages: &[&MessageState],
+    selected: Option<usize>,
+    state: &DashboardState,
+    layout: MessageViewportLayout,
+    loaded_custom_emoji_urls: &[String],
+) -> Vec<Line<'static>> {
+    let rows = MessageViewportPlan::new(
+        messages,
+        selected,
+        state,
+        layout.content_width,
+        layout.preview_width,
+        layout.max_preview_height,
+    );
+    let plan = MessageRenderPlan {
+        rows: &rows,
+        layout,
+    };
+    message_viewport_lines_from_plan(&plan, state, loaded_custom_emoji_urls)
 }
 
 fn render_new_messages_notice(frame: &mut Frame, list: Rect, state: &DashboardState) {
@@ -330,10 +413,7 @@ fn format_unread_banner_since(message_id: Id<MessageMarker>) -> Option<String> {
 fn render_inline_reaction_emojis(
     frame: &mut Frame,
     list: Rect,
-    messages: &[&MessageState],
-    state: &DashboardState,
-    content_width: usize,
-    selected: Option<usize>,
+    plan: &MessageRenderPlan<'_, '_>,
     emoji_images: &[EmojiImage<'_>],
 ) {
     if emoji_images.is_empty() || list.height == 0 || list.width <= MESSAGE_AVATAR_OFFSET {
@@ -346,52 +426,19 @@ fn render_inline_reaction_emojis(
     let list_right = list_left + list.width as isize;
     let avatar_offset = MESSAGE_AVATAR_OFFSET as isize;
 
-    let mut rendered_rows: isize = 0;
-
-    for (index, message) in messages.iter().enumerate() {
-        if rendered_rows >= list.height as isize {
+    for row in plan.rows.rows() {
+        if row.message_top >= list.height as isize {
             break;
         }
-        let line_offset = if index == 0 {
-            state.message_line_scroll() as isize
-        } else {
-            0
-        };
-        let global_index = state.message_scroll().saturating_add(index);
-        let preview_width = if state.show_images() {
-            inline_image_preview_width(list)
-        } else {
-            0
-        };
-        let max_preview_height = if state.show_images() {
-            inline_image_preview_height(list, true)
-        } else {
-            0
-        };
-        let metrics = state.message_row_metrics_at_with_selected_bottom(
-            global_index,
-            message,
-            content_width,
-            preview_width,
-            max_preview_height,
-            selected == Some(index),
-        );
 
         let layout = lay_out_reaction_chips_with_custom_emoji_images(
-            &message.reactions,
-            content_width,
-            state.show_custom_emoji(),
+            &row.message.reactions,
+            plan.layout.content_width,
+            true,
         );
         if !layout.slots.is_empty() {
-            // Reactions are rendered after the body and inline preview spacer.
-            // The body starts after the optional date separator, so the
-            // reaction strip begins at:
-            //     body_top + body_rows + preview_height
-            let message_top = rendered_rows - line_offset;
-            let reaction_strip_top = message_top + metrics.reaction_top_offset() as isize;
-
             for slot in layout.slots {
-                let row_in_list = reaction_strip_top + slot.line as isize;
+                let row_in_list = row.reaction_top + slot.line as isize;
                 if row_in_list < 0 || row_in_list >= list.height as isize {
                     continue;
                 }
@@ -401,7 +448,7 @@ fn render_inline_reaction_emojis(
                 let absolute_row = list_top + row_in_list;
                 let absolute_col = list_left
                     + avatar_offset
-                    + selected_message_content_x_offset(selected == Some(index)) as isize
+                    + selected_message_content_x_offset(row.selected) as isize
                     + slot.col as isize;
                 if absolute_col >= list_right {
                     continue;
@@ -423,9 +470,6 @@ fn render_inline_reaction_emojis(
                 frame.render_widget(RatatuiImage::new(image.protocol), image_area);
             }
         }
-
-        rendered_rows = rendered_rows
-            .saturating_add(metrics.visible_rows_after_scroll(line_offset as usize) as isize);
     }
 }
 
@@ -433,10 +477,8 @@ fn render_inline_reaction_emojis(
 fn render_inline_message_body_emojis(
     frame: &mut Frame,
     list: Rect,
-    messages: &[&MessageState],
+    plan: &MessageRenderPlan<'_, '_>,
     state: &DashboardState,
-    content_width: usize,
-    selected: Option<usize>,
     emoji_images: &[EmojiImage<'_>],
     loaded_custom_emoji_urls: &[String],
 ) {
@@ -450,49 +492,23 @@ fn render_inline_message_body_emojis(
     let list_right = list_left + list.width as isize;
     let avatar_offset = MESSAGE_AVATAR_OFFSET as isize;
 
-    let mut rendered_rows: isize = 0;
-
-    for (index, message) in messages.iter().enumerate() {
-        if rendered_rows >= list.height as isize {
+    for row in plan.rows.rows() {
+        if row.message_top >= list.height as isize {
             break;
         }
-        let line_offset = if index == 0 {
-            state.message_line_scroll() as isize
-        } else {
-            0
-        };
-        let global_index = state.message_scroll().saturating_add(index);
-        let metrics = state.message_row_metrics_at_with_selected_bottom(
-            global_index,
-            message,
-            content_width,
-            if state.show_images() {
-                inline_image_preview_width(list)
-            } else {
-                0
-            },
-            if state.show_images() {
-                inline_image_preview_height(list, true)
-            } else {
-                0
-            },
-            selected == Some(index),
-        );
-        let message_top = rendered_rows - line_offset;
-        let body_top = message_top + metrics.body_top_offset() as isize;
 
         let body_lines = format_message_content_lines_with_loaded_custom_emoji_urls(
-            message,
+            row.message,
             state,
-            content_width.max(8),
+            plan.layout.content_width.max(8),
             loaded_custom_emoji_urls,
         );
         for (line_idx, line) in body_lines.iter().enumerate() {
             if line.image_slots.is_empty() {
                 continue;
             }
-            let row_in_list = body_top
-                + state.message_header_line_count_at(global_index) as isize
+            let row_in_list = row.body_top
+                + state.message_header_line_count_at(row.global_index) as isize
                 + line_idx as isize;
             if row_in_list < 0 || row_in_list >= list.height as isize {
                 continue;
@@ -504,7 +520,7 @@ fn render_inline_message_body_emojis(
             for slot in &line.image_slots {
                 let absolute_col = list_left
                     + avatar_offset
-                    + selected_message_content_x_offset(selected == Some(index)) as isize
+                    + selected_message_content_x_offset(row.selected) as isize
                     + slot.col as isize;
                 if absolute_col >= list_right {
                     continue;
@@ -526,9 +542,6 @@ fn render_inline_message_body_emojis(
                 frame.render_widget(RatatuiImage::new(image.protocol), image_area);
             }
         }
-
-        rendered_rows = rendered_rows
-            .saturating_add(metrics.visible_rows_after_scroll(line_offset as usize) as isize);
     }
 }
 
@@ -543,28 +556,29 @@ pub(in crate::tui::ui) fn message_body_custom_emoji_rows(
     max_preview_height: u16,
 ) -> Vec<isize> {
     let mut rows = Vec::new();
-    let mut rendered_rows: isize = 0;
+    let layout = MessageViewportLayout {
+        content_width,
+        list_width: content_width,
+        selected_card_width: content_width,
+        preview_width,
+        max_preview_height,
+    };
+    let plan_rows = MessageViewportPlan::new(
+        messages,
+        selected,
+        state,
+        layout.content_width,
+        layout.preview_width,
+        layout.max_preview_height,
+    );
+    let plan = MessageRenderPlan {
+        rows: &plan_rows,
+        layout,
+    };
 
-    for (index, message) in messages.iter().enumerate() {
-        let line_offset = if index == 0 {
-            state.message_line_scroll() as isize
-        } else {
-            0
-        };
-        let global_index = state.message_scroll().saturating_add(index);
-        let metrics = state.message_row_metrics_at_with_selected_bottom(
-            global_index,
-            message,
-            content_width,
-            preview_width,
-            max_preview_height,
-            selected == Some(index),
-        );
-        let message_top = rendered_rows - line_offset;
-        let body_top = message_top + metrics.body_top_offset() as isize;
-
+    for row in plan.rows.rows() {
         let body_lines = format_message_content_lines_with_loaded_custom_emoji_urls(
-            message,
+            row.message,
             state,
             content_width.max(8),
             loaded_custom_emoji_urls,
@@ -572,15 +586,12 @@ pub(in crate::tui::ui) fn message_body_custom_emoji_rows(
         for (line_idx, line) in body_lines.iter().enumerate() {
             if !line.image_slots.is_empty() {
                 rows.push(
-                    body_top
-                        + state.message_header_line_count_at(global_index) as isize
+                    row.body_top
+                        + state.message_header_line_count_at(row.global_index) as isize
                         + line_idx as isize,
                 );
             }
         }
-
-        rendered_rows = rendered_rows
-            .saturating_add(metrics.visible_rows_after_scroll(line_offset as usize) as isize);
     }
 
     rows
@@ -632,97 +643,6 @@ fn render_image_preview_overflow_marker(frame: &mut Frame, area: Rect, overflow_
             .style(Style::default().fg(Color::White).bg(Color::Black).bold()),
         marker_area,
     );
-}
-
-pub(in crate::tui::ui) fn message_viewport_lines(
-    messages: &[&MessageState],
-    selected: Option<usize>,
-    state: &DashboardState,
-    layout: MessageViewportLayout,
-    loaded_custom_emoji_urls: &[String],
-) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
-    let state_messages = state.messages();
-    for (index, message) in messages.iter().enumerate() {
-        let author = message.author.clone();
-        let author_style = message_author_style(state.message_author_role_color(message));
-        let preview_spacers = inline_preview_spacers_for_message(
-            message,
-            layout.preview_width,
-            layout.max_preview_height,
-        );
-
-        let global_index = state.message_scroll().saturating_add(index);
-        let has_state_message = state_messages
-            .get(global_index)
-            .is_some_and(|state_message| state_message.id == message.id);
-        let show_header = if has_state_message {
-            state.message_starts_author_group_at(global_index)
-        } else {
-            true
-        };
-        let bottom_gap = if has_state_message {
-            state.message_bottom_gap_after(global_index) > 0
-        } else {
-            true
-        };
-        let mut top_lines = Vec::new();
-        if has_state_message && state.message_starts_new_day_at(global_index) {
-            top_lines.push(date_separator_line(message.id, layout.list_width));
-        }
-        if has_state_message && state.should_draw_unread_divider_at(global_index) {
-            top_lines.push(unread_divider_line(layout.list_width));
-        }
-        let separator_lines = top_lines.len();
-        let line_offset = usize::from(index == 0) * state.message_line_scroll();
-        let body_skip = line_offset.saturating_sub(separator_lines);
-        let item_content_width = layout.content_width;
-        let selected_grouped_continuation = selected == Some(index) && !show_header;
-        let item_line_offset = if selected_grouped_continuation {
-            body_skip.saturating_sub(1)
-        } else {
-            body_skip
-        };
-
-        for line in top_lines.into_iter().skip(line_offset) {
-            lines.push(line);
-        }
-
-        let (content, reactions) = format_message_content_sections_with_loaded_custom_emoji_urls(
-            message,
-            state,
-            item_content_width.max(8),
-            loaded_custom_emoji_urls,
-        );
-
-        let sent_time = format_message_sent_time(message.id);
-        let item_lines = message_item_lines_with_previews(MessageItemLinesInput {
-            author,
-            author_style,
-            author_is_bot: message.author_is_bot,
-            sent_time: sent_time.clone(),
-            show_header,
-            content,
-            reactions,
-            content_width: item_content_width,
-            preview_spacers: &preview_spacers,
-            bottom_gap,
-            line_offset: item_line_offset,
-        });
-        if selected == Some(index) {
-            lines.extend(selected_message_lines(
-                item_lines,
-                &sent_time,
-                layout.selected_card_width,
-                body_skip == 0,
-                bottom_gap,
-                show_header,
-            ));
-        } else {
-            lines.extend(item_lines);
-        }
-    }
-    lines
 }
 
 #[cfg(test)]
@@ -1054,38 +974,6 @@ pub(in crate::tui::ui) fn selected_message_card_width(
         .max(4)
 }
 
-fn message_body_top_row(
-    messages: &[&MessageState],
-    state: &DashboardState,
-    local_index: usize,
-    content_width: usize,
-    preview_width: u16,
-    max_preview_height: u16,
-) -> Option<isize> {
-    let mut rendered_rows = 0usize;
-    for (index, message) in messages.iter().enumerate() {
-        let line_offset = usize::from(index == 0) * state.message_line_scroll();
-        let global_index = state.message_scroll().saturating_add(index);
-        let metrics = state.message_row_metrics_at_with_selected_bottom(
-            global_index,
-            message,
-            content_width,
-            preview_width,
-            max_preview_height,
-            false,
-        );
-        let body_top =
-            rendered_rows as isize - line_offset as isize + metrics.body_top_offset() as isize;
-        if index == local_index {
-            return Some(body_top);
-        }
-
-        rendered_rows =
-            rendered_rows.saturating_add(metrics.visible_rows_after_scroll(line_offset));
-    }
-    None
-}
-
 pub(in crate::tui::ui) fn format_message_sent_time(message_id: Id<MessageMarker>) -> String {
     format_message_local_time(message_id)
 }
@@ -1200,34 +1088,7 @@ fn inline_preview_spacers_for_message(
         .collect()
 }
 
-fn total_inline_preview_height_for_message(
-    message: &MessageState,
-    preview_width: u16,
-    max_preview_height: u16,
-) -> usize {
-    inline_preview_spacers_for_message(message, preview_width, max_preview_height)
-        .into_iter()
-        .map(|spacer| {
-            usize::from(spacer.height).saturating_add(usize::from(spacer.overflow_count > 0))
-        })
-        .sum()
-}
-
-fn inline_preview_rows_before_message(
-    messages: &[&MessageState],
-    message_index: usize,
-    preview_width: u16,
-    max_preview_height: u16,
-) -> usize {
-    messages
-        .iter()
-        .take(message_index)
-        .map(|message| {
-            total_inline_preview_height_for_message(message, preview_width, max_preview_height)
-        })
-        .sum()
-}
-
+#[cfg(test)]
 pub(in crate::tui::ui) fn inline_image_preview_row(
     messages: &[&MessageState],
     state: &DashboardState,

@@ -1,7 +1,4 @@
-use reqwest::{
-    header::AUTHORIZATION,
-    multipart::{Form, Part},
-};
+use reqwest::multipart::{Form, Part};
 use serde_json::{Value, json};
 
 use crate::discord::ids::{
@@ -49,13 +46,10 @@ impl DiscordRest {
         body: Value,
         attachments: &[MessageAttachmentUpload],
     ) -> Result<MessageInfo> {
-        let request = self
-            .raw_http
-            .post(format!(
-                "https://discord.com/api/v9/channels/{}/messages",
-                channel_id.get()
-            ))
-            .header(AUTHORIZATION, &self.token);
+        let request = self.raw_http.post(format!(
+            "https://discord.com/api/v9/channels/{}/messages",
+            channel_id.get()
+        ));
 
         let request = if attachments.is_empty() {
             request.json(&body)
@@ -63,19 +57,7 @@ impl DiscordRest {
             request.multipart(message_multipart_form(body, attachments).await?)
         };
 
-        let raw = request
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("send message request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("send message failed: {error}")))?
-            .json::<Value>()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("send message decode failed: {error}"))
-            })?;
+        let raw: Value = self.send_json(request, "send message").await?;
         parse_message_info(&raw).ok_or_else(|| {
             AppError::DiscordRequest("send message response was missing required fields".to_owned())
         })
@@ -88,27 +70,18 @@ impl DiscordRest {
         content: &str,
     ) -> Result<MessageInfo> {
         validate_message_content(content)?;
-        let raw = self
-            .raw_http
-            .patch(format!(
-                "https://discord.com/api/v9/channels/{}/messages/{}",
-                channel_id.get(),
-                message_id.get()
-            ))
-            .header(AUTHORIZATION, &self.token)
-            .json(&json!({ "content": content }))
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("edit message request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("edit message failed: {error}")))?
-            .json::<Value>()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("edit message decode failed: {error}"))
-            })?;
+        let raw: Value = self
+            .send_json(
+                self.raw_http
+                    .patch(format!(
+                        "https://discord.com/api/v9/channels/{}/messages/{}",
+                        channel_id.get(),
+                        message_id.get()
+                    ))
+                    .json(&json!({ "content": content })),
+                "edit message",
+            )
+            .await?;
         parse_message_info(&raw).ok_or_else(|| {
             AppError::DiscordRequest("edit message response was missing required fields".to_owned())
         })
@@ -119,21 +92,15 @@ impl DiscordRest {
         channel_id: Id<ChannelMarker>,
         message_id: Id<MessageMarker>,
     ) -> Result<()> {
-        self.raw_http
-            .delete(format!(
+        self.send_unit(
+            self.raw_http.delete(format!(
                 "https://discord.com/api/v9/channels/{}/messages/{}",
                 channel_id.get(),
                 message_id.get()
-            ))
-            .header(AUTHORIZATION, &self.token)
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("delete message request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("delete message failed: {error}")))?;
-        Ok(())
+            )),
+            "delete message",
+        )
+        .await
     }
 
     pub async fn load_message_history(
@@ -148,35 +115,12 @@ impl DiscordRest {
                 "https://discord.com/api/v9/channels/{}/messages",
                 channel_id.get()
             ))
-            .header(AUTHORIZATION, &self.token)
             .query(&[("limit", limit.to_string())]);
         if let Some(message_id) = before {
             request = request.query(&[("before", message_id.to_string())]);
         }
-        let raw_messages: Vec<Value> = request
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("message history request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("message history failed: {error}")))?
-            .json()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("message history decode failed: {error}"))
-            })?;
-
-        raw_messages
-            .iter()
-            .map(|raw| {
-                parse_message_info(raw).ok_or_else(|| {
-                    AppError::DiscordRequest(
-                        "history message response was missing required fields".to_owned(),
-                    )
-                })
-            })
-            .collect()
+        let raw_messages: Vec<Value> = self.send_json(request, "message history").await?;
+        parse_message_list(raw_messages.iter(), "history message response")
     }
 
     pub async fn load_message_history_around(
@@ -206,38 +150,16 @@ impl DiscordRest {
         message_id: Id<MessageMarker>,
         limit: u16,
     ) -> Result<Vec<MessageInfo>> {
-        let raw_messages: Vec<Value> = self
+        let request = self
             .raw_http
             .get(format!(
                 "https://discord.com/api/v9/channels/{}/messages",
                 channel_id.get()
             ))
-            .header(AUTHORIZATION, &self.token)
             .query(&[("limit", limit.to_string())])
-            .query(&[(anchor_name, message_id.to_string())])
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("message history request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("message history failed: {error}")))?
-            .json()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("message history decode failed: {error}"))
-            })?;
-
-        raw_messages
-            .iter()
-            .map(|raw| {
-                parse_message_info(raw).ok_or_else(|| {
-                    AppError::DiscordRequest(
-                        "history message response was missing required fields".to_owned(),
-                    )
-                })
-            })
-            .collect()
+            .query(&[(anchor_name, message_id.to_string())]);
+        let raw_messages: Vec<Value> = self.send_json(request, "message history").await?;
+        parse_message_list(raw_messages.iter(), "history message response")
     }
 
     pub async fn load_pinned_messages(
@@ -245,21 +167,16 @@ impl DiscordRest {
         channel_id: Id<ChannelMarker>,
     ) -> Result<Vec<MessageInfo>> {
         let raw: Value = self
-            .raw_http
-            .get(format!(
-                "https://discord.com/api/v9/channels/{}/messages/pins",
-                channel_id.get()
-            ))
-            .header(AUTHORIZATION, &self.token)
-            .query(&[("limit", "50")])
-            .send()
-            .await
-            .map_err(|error| AppError::DiscordRequest(format!("pins request failed: {error}")))?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("pins failed: {error}")))?
-            .json()
-            .await
-            .map_err(|error| AppError::DiscordRequest(format!("pins decode failed: {error}")))?;
+            .send_json(
+                self.raw_http
+                    .get(format!(
+                        "https://discord.com/api/v9/channels/{}/messages/pins",
+                        channel_id.get()
+                    ))
+                    .query(&[("limit", "50")]),
+                "pins",
+            )
+            .await?;
         let messages: Vec<&Value> = match &raw {
             Value::Array(items) => items.iter().collect(),
             Value::Object(object) => object
@@ -303,15 +220,22 @@ impl DiscordRest {
                 message_id.get()
             ))
         };
-        request
-            .header(AUTHORIZATION, &self.token)
-            .send()
-            .await
-            .map_err(|error| AppError::DiscordRequest(format!("pin request failed: {error}")))?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("pin update failed: {error}")))?;
-        Ok(())
+        self.send_unit(request, "pin update").await
     }
+}
+
+fn parse_message_list<'a>(
+    raw_messages: impl IntoIterator<Item = &'a Value>,
+    label: &str,
+) -> Result<Vec<MessageInfo>> {
+    raw_messages
+        .into_iter()
+        .map(|raw| {
+            parse_message_info(raw).ok_or_else(|| {
+                AppError::DiscordRequest(format!("{label} was missing required fields"))
+            })
+        })
+        .collect()
 }
 
 pub(super) fn message_request_body(

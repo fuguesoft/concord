@@ -13,6 +13,7 @@ use crate::discord::{PresenceStatus, ProfileAvatarUpload};
 
 use crate::discord::ReactionUsersInfo;
 use crate::tui::keybindings::{KeyChord, LeaderShortcutItem, SelectionAction};
+use crate::tui::text_input::TextInputState;
 
 mod attachment_viewer;
 mod channel_actions;
@@ -424,8 +425,7 @@ pub(super) struct UserProfileSettingsState {
     pub(super) selected_global: usize,
     pub(super) selected_guild: usize,
     pub(super) editing: Option<UserProfileSettingsField>,
-    pub(super) edit_buffer: String,
-    pub(super) edit_cursor_byte_index: usize,
+    pub(super) edit_input: TextInputState,
     pub(super) global_display_name: Option<String>,
     pub(super) global_pronouns: Option<String>,
     pub(super) global_avatar_path: Option<String>,
@@ -543,8 +543,7 @@ impl UserProfileSettingsState {
         self.guild_nickname = None;
         self.guild_pronouns = None;
         self.editing = None;
-        self.edit_buffer.clear();
-        self.edit_cursor_byte_index = 0;
+        self.edit_input.clear();
         self.saving = false;
         self.status = Some("Saved profile changes".to_owned());
     }

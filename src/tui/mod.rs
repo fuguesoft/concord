@@ -12,6 +12,7 @@ mod selection;
 mod state;
 mod terminal;
 mod text_cursor;
+mod text_input;
 mod ui;
 
 use tokio::sync::{mpsc, watch};
@@ -94,7 +95,7 @@ mod tests {
         let mut emoji_images = EmojiImageCache::new();
         let _ = rustls::crypto::ring::default_provider().install_default();
         let client = DiscordClient::new("test-token".to_owned()).expect("token is valid header");
-        let (preview_decode_tx, _preview_decode_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (media_decode_tx, _media_decode_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut deferred_effects = VecDeque::new();
 
         {
@@ -104,7 +105,7 @@ mod tests {
                 image_previews: &mut image_previews,
                 avatar_images: &mut avatar_images,
                 emoji_images: &mut emoji_images,
-                preview_decode_tx: &preview_decode_tx,
+                media_decode_tx: &media_decode_tx,
             };
             effects::process_sequenced_effect(
                 SequencedAppEvent {
@@ -130,7 +131,7 @@ mod tests {
                 image_previews: &mut image_previews,
                 avatar_images: &mut avatar_images,
                 emoji_images: &mut emoji_images,
-                preview_decode_tx: &preview_decode_tx,
+                media_decode_tx: &media_decode_tx,
             };
             effects::process_deferred_effects(2, &mut deferred_effects, &mut ctx);
         }

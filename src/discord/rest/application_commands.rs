@@ -1,9 +1,8 @@
-use reqwest::header::AUTHORIZATION;
 use serde_json::{Value, json};
 
 use crate::discord::ids::{Id, marker::GuildMarker};
 use crate::{
-    AppError, Result,
+    Result,
     discord::{
         ApplicationCommandChoiceInfo, ApplicationCommandInfo, ApplicationCommandInteraction,
         ApplicationCommandInteractionOption, ApplicationCommandOptionInfo,
@@ -24,28 +23,9 @@ impl DiscordRest {
             ),
             None => "https://discord.com/api/v9/users/@me/application-command-index".to_owned(),
         };
-        let raw = self
-            .raw_http
-            .get(endpoint)
-            .header(AUTHORIZATION, &self.token)
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!(
-                    "application command index request failed: {error}"
-                ))
-            })?
-            .error_for_status()
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("application command index failed: {error}"))
-            })?
-            .json::<Value>()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!(
-                    "application command index decode failed: {error}"
-                ))
-            })?;
+        let raw: Value = self
+            .send_json(self.raw_http.get(endpoint), "application command index")
+            .await?;
         Ok(parse_application_command_index(&raw))
     }
 
@@ -55,20 +35,13 @@ impl DiscordRest {
         session_id: &str,
     ) -> Result<()> {
         let body = application_command_interaction_body(interaction, session_id);
-        self.raw_http
-            .post("https://discord.com/api/v9/interactions")
-            .header(AUTHORIZATION, &self.token)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("application command request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("application command failed: {error}"))
-            })?;
-        Ok(())
+        self.send_unit(
+            self.raw_http
+                .post("https://discord.com/api/v9/interactions")
+                .json(&body),
+            "application command",
+        )
+        .await
     }
 }
 

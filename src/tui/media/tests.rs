@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Cursor};
 
 use crate::discord::ids::{Id, marker::MessageMarker};
 use crate::discord::test_builders::{
     MessageCreateFixture, guild_message_create_fixture, message_create_event,
 };
-use image::{DynamicImage, ImageBuffer, Rgba};
+use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 
 use crate::{
     config::{DisplayOptions, ImagePreviewQualityPreset},
@@ -33,8 +33,49 @@ fn layout(list_height: usize) -> ImagePreviewLayout {
     }
 }
 
+fn image_preview_cache_without_picker() -> ImagePreviewCache {
+    ImagePreviewCache {
+        picker: None,
+        entries: HashMap::new(),
+        tick: 0,
+        decode_generation: 0,
+        protocol_generation: 0,
+    }
+}
+
+fn avatar_cache_without_picker() -> AvatarImageCache {
+    AvatarImageCache {
+        picker: None,
+        entries: HashMap::new(),
+        active_popup_avatar_url: None,
+        tick: 0,
+        decode_generation: 0,
+        protocol_generation: 0,
+    }
+}
+
+fn emoji_cache_without_picker() -> EmojiImageCache {
+    EmojiImageCache {
+        picker: None,
+        entries: HashMap::new(),
+        tick: 0,
+        decode_generation: 0,
+        protocol_generation: 0,
+    }
+}
+
 fn push_media_message(state: &mut DashboardState, event: MessageCreateFixture) {
     state.push_event(message_create_event(event));
+}
+
+fn encoded_png(width: u32, height: u32) -> Vec<u8> {
+    let image =
+        DynamicImage::ImageRgba8(ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0])));
+    let mut bytes = Cursor::new(Vec::new());
+    image
+        .write_to(&mut bytes, ImageFormat::Png)
+        .expect("test image should encode");
+    bytes.into_inner()
 }
 
 #[test]
@@ -666,13 +707,7 @@ fn avatar_targets_clip_first_message_avatar_after_line_scroll() {
 
 #[test]
 fn avatar_image_cache_evicts_least_recently_used_when_over_capacity() {
-    let mut cache = AvatarImageCache {
-        picker: None,
-        entries: HashMap::new(),
-        active_popup_avatar_url: None,
-        tick: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = avatar_cache_without_picker();
     for id in 0..MAX_AVATAR_IMAGE_CACHE_ENTRIES {
         let url = avatar_preview_url(
             &format!("https://cdn.discordapp.com/avatars/{id}.png"),
@@ -742,13 +777,7 @@ fn avatar_protocol_key_tracks_render_clipping() {
 
 #[test]
 fn avatar_popup_request_prunes_cache_to_limit() {
-    let mut cache = AvatarImageCache {
-        picker: None,
-        entries: HashMap::new(),
-        active_popup_avatar_url: None,
-        tick: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = avatar_cache_without_picker();
     for id in 0..MAX_AVATAR_IMAGE_CACHE_ENTRIES {
         cache.entries.insert(
             format!("https://cdn.discordapp.com/avatars/{id}.png"),
@@ -776,13 +805,7 @@ fn avatar_popup_request_prunes_cache_to_limit() {
 
 #[test]
 fn avatar_popup_upload_request_uses_local_preview_command() {
-    let mut cache = AvatarImageCache {
-        picker: None,
-        entries: HashMap::new(),
-        active_popup_avatar_url: None,
-        tick: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = avatar_cache_without_picker();
     let upload = ProfileAvatarUpload::from_bytes("avatar.png".to_owned(), vec![1, 2, 3]);
 
     let request = cache.next_request_for_profile_upload("pending-avatar", || Some(upload.clone()));
@@ -801,11 +824,8 @@ fn avatar_popup_upload_request_uses_local_preview_command() {
 fn avatar_cache_pruning_preserves_active_popup_avatar() {
     let popup_url = "https://cdn.discordapp.com/avatars/popup.png?size=128";
     let mut cache = AvatarImageCache {
-        picker: None,
-        entries: HashMap::new(),
         active_popup_avatar_url: Some(popup_url.to_owned()),
-        tick: 0,
-        protocol_generation: 0,
+        ..avatar_cache_without_picker()
     };
     for id in 0..MAX_AVATAR_IMAGE_CACHE_ENTRIES {
         let url = avatar_preview_url(
@@ -838,6 +858,54 @@ fn avatar_cache_pruning_preserves_active_popup_avatar() {
 
     assert_eq!(cache.entries.len(), MAX_AVATAR_IMAGE_CACHE_ENTRIES + 1);
     assert!(cache.entries.contains_key(popup_url));
+}
+
+#[test]
+fn avatar_store_decoded_records_decode_failure() {
+    let key = "https://cdn.discordapp.com/avatars/failed.png?size=64".to_owned();
+    let mut cache = avatar_cache_without_picker();
+    cache.entries.insert(
+        key.clone(),
+        AvatarImageEntry::Decoding {
+            generation: 1,
+            last_used: 1,
+        },
+    );
+
+    cache.store_decoded(
+        key.clone(),
+        1,
+        Err("decode failed: invalid avatar".to_owned()),
+    );
+
+    assert!(matches!(
+        cache.entries.get(&key),
+        Some(AvatarImageEntry::Failed { .. })
+    ));
+}
+
+#[test]
+fn avatar_store_decoded_ignores_replaced_decoding_generation() {
+    let key = "https://cdn.discordapp.com/avatars/newer.png?size=64".to_owned();
+    let mut cache = avatar_cache_without_picker();
+    cache.entries.insert(
+        key.clone(),
+        AvatarImageEntry::Decoding {
+            generation: 2,
+            last_used: 2,
+        },
+    );
+
+    cache.store_decoded(
+        key.clone(),
+        1,
+        Err("decode failed: old generation".to_owned()),
+    );
+
+    assert!(matches!(
+        cache.entries.get(&key),
+        Some(AvatarImageEntry::Decoding { generation, .. }) if *generation == 2
+    ));
 }
 
 #[test]
@@ -1096,13 +1164,7 @@ fn image_preview_targets_include_image_messages_in_scrolloff_context() {
 
 #[test]
 fn image_preview_request_is_created_for_draw_target() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let target = image_preview_target(1);
 
     assert!(cache.entries.is_empty());
@@ -1122,26 +1184,9 @@ fn image_preview_request_is_created_for_draw_target() {
 
 #[test]
 fn image_surface_refresh_protocols_advances_generation() {
-    let mut previews = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
-    let mut avatars = AvatarImageCache {
-        picker: None,
-        entries: HashMap::new(),
-        active_popup_avatar_url: None,
-        tick: 0,
-        protocol_generation: 0,
-    };
-    let mut emojis = EmojiImageCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        protocol_generation: 0,
-    };
+    let mut previews = image_preview_cache_without_picker();
+    let mut avatars = avatar_cache_without_picker();
+    let mut emojis = emoji_cache_without_picker();
 
     previews.refresh_protocols();
     avatars.refresh_protocols();
@@ -1154,13 +1199,7 @@ fn image_surface_refresh_protocols_advances_generation() {
 
 #[test]
 fn image_preview_render_state_preserves_target_order() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let first = image_preview_target(1);
     let second = ImagePreviewTarget {
         message_id: Id::new(1),
@@ -1201,13 +1240,7 @@ fn image_preview_render_state_preserves_target_order() {
 
 #[test]
 fn image_preview_cache_keeps_duplicate_urls_as_separate_preview_instances() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let first = image_preview_target(1);
     let second = ImagePreviewTarget {
         preview_index: 1,
@@ -1235,13 +1268,7 @@ fn image_preview_cache_keeps_duplicate_urls_as_separate_preview_instances() {
 
 #[test]
 fn image_preview_cache_deduplicates_url_already_loading_from_previous_frame() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let first = image_preview_target(1);
     cache.next_requests(std::slice::from_ref(&first));
     let second = ImagePreviewTarget {
@@ -1258,13 +1285,7 @@ fn image_preview_cache_deduplicates_url_already_loading_from_previous_frame() {
 
 #[test]
 fn image_preview_cache_keeps_viewer_and_inline_entries_separate() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let inline = image_preview_target(1);
     let viewer = ImagePreviewTarget {
         viewer: true,
@@ -1286,13 +1307,7 @@ fn image_preview_cache_keeps_viewer_and_inline_entries_separate() {
 
 #[test]
 fn image_preview_cache_evicts_least_recently_used_entries() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let existing_targets = (1..=MAX_IMAGE_PREVIEW_CACHE_ENTRIES as u64)
         .map(image_preview_target)
         .collect::<Vec<_>>();
@@ -1310,13 +1325,7 @@ fn image_preview_cache_evicts_least_recently_used_entries() {
 
 #[test]
 fn image_preview_cache_limits_visible_requests() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let targets = (1..=MAX_IMAGE_PREVIEW_CACHE_ENTRIES as u64 + 2)
         .map(image_preview_target)
         .collect::<Vec<_>>();
@@ -1335,13 +1344,7 @@ fn image_preview_cache_limits_visible_requests() {
 
 #[test]
 fn image_preview_store_loaded_preserves_existing_non_loading_entries() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let existing = image_preview_target(1).key();
     let loading = ImagePreviewTarget {
         message_id: Id::new(2),
@@ -1380,13 +1383,7 @@ fn image_preview_store_loaded_preserves_existing_non_loading_entries() {
 
 #[test]
 fn image_preview_loaded_bytes_start_decode_jobs_for_loading_entries() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let target = image_preview_target(1);
     let key = target.key();
     let render_info = target.preview_render_info();
@@ -1402,11 +1399,11 @@ fn image_preview_loaded_bytes_start_decode_jobs_for_loading_entries() {
     let jobs = cache.decode_jobs_for_loaded_keys(vec![key.clone()], b"image bytes");
 
     assert_eq!(jobs.len(), 1);
-    assert_eq!(jobs[0].key, key);
+    assert_eq!(jobs[0].key, MediaImageDecodeKey::Preview(key.clone()));
     assert_eq!(jobs[0].generation, 1);
     assert_eq!(jobs[0].bytes.as_ref(), b"image bytes");
     assert!(matches!(
-        cache.entries.get(&jobs[0].key),
+        cache.entries.get(&key),
         Some(ImagePreviewEntry::Decoding { filename, generation, .. })
             if filename == "loading.png" && *generation == 1
     ));
@@ -1414,13 +1411,7 @@ fn image_preview_loaded_bytes_start_decode_jobs_for_loading_entries() {
 
 #[test]
 fn image_preview_store_decoded_records_decode_failure() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let target = image_preview_target(1);
     let key = target.key();
     let render_info = target.preview_render_info();
@@ -1434,11 +1425,11 @@ fn image_preview_store_decoded_records_decode_failure() {
         },
     );
 
-    cache.store_decoded(ImagePreviewDecodeResult {
-        key: key.clone(),
-        generation: 1,
-        result: Err("decode failed: invalid image".to_owned()),
-    });
+    cache.store_decoded(
+        key.clone(),
+        1,
+        Err("decode failed: invalid image".to_owned()),
+    );
 
     assert!(matches!(
         cache.entries.get(&key),
@@ -1449,13 +1440,7 @@ fn image_preview_store_decoded_records_decode_failure() {
 
 #[test]
 fn image_preview_store_decoded_ignores_stale_results() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let key = image_preview_target(1).key();
     cache.entries.insert(
         key.clone(),
@@ -1466,11 +1451,7 @@ fn image_preview_store_decoded_ignores_stale_results() {
         },
     );
 
-    cache.store_decoded(ImagePreviewDecodeResult {
-        key: key.clone(),
-        generation: 1,
-        result: Err("decode failed: stale".to_owned()),
-    });
+    cache.store_decoded(key.clone(), 1, Err("decode failed: stale".to_owned()));
 
     assert!(matches!(
         cache.entries.get(&key),
@@ -1481,13 +1462,7 @@ fn image_preview_store_decoded_ignores_stale_results() {
 
 #[test]
 fn image_preview_store_decoded_ignores_replaced_decoding_generation() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let target = image_preview_target(1);
     let key = target.key();
     let render_info = target.preview_render_info();
@@ -1501,11 +1476,11 @@ fn image_preview_store_decoded_ignores_replaced_decoding_generation() {
         },
     );
 
-    cache.store_decoded(ImagePreviewDecodeResult {
-        key: key.clone(),
-        generation: 1,
-        result: Err("decode failed: old generation".to_owned()),
-    });
+    cache.store_decoded(
+        key.clone(),
+        1,
+        Err("decode failed: old generation".to_owned()),
+    );
 
     assert!(matches!(
         cache.entries.get(&key),
@@ -1523,14 +1498,24 @@ fn decode_original_preview_image_reports_invalid_bytes() {
 }
 
 #[test]
+fn media_decode_rejects_oversized_image_dimensions() {
+    for (width, height) in [
+        (MAX_DECODED_IMAGE_WIDTH + 1, 1),
+        (1, MAX_DECODED_IMAGE_HEIGHT + 1),
+    ] {
+        let bytes = encoded_png(width, height);
+        let error = decode_image_bytes(&bytes).expect_err("oversized image should be rejected");
+
+        assert!(
+            error.starts_with("decode failed:"),
+            "oversized {width}x{height} image should fail with decode context, got {error:?}"
+        );
+    }
+}
+
+#[test]
 fn image_preview_store_failed_preserves_existing_non_loading_entries() {
-    let mut cache = ImagePreviewCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        decode_generation: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = image_preview_cache_without_picker();
     let existing = image_preview_target(1).key();
     let loading = ImagePreviewTarget {
         message_id: Id::new(2),
@@ -1828,12 +1813,7 @@ fn emoji_image_request_is_created_for_visible_target() {
 
 #[test]
 fn emoji_image_cache_skips_requests_without_image_protocol() {
-    let mut cache = EmojiImageCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = emoji_cache_without_picker();
     let target = EmojiImageTarget {
         url: "https://cdn.discordapp.com/emojis/50.png".to_owned(),
     };
@@ -1845,13 +1825,56 @@ fn emoji_image_cache_skips_requests_without_image_protocol() {
 }
 
 #[test]
+fn emoji_store_decoded_records_decode_failure() {
+    let url = "https://cdn.discordapp.com/emojis/failed.png".to_owned();
+    let mut cache = emoji_cache_without_picker();
+    cache.entries.insert(
+        url.clone(),
+        EmojiImageEntry::Decoding {
+            generation: 1,
+            last_used: 1,
+        },
+    );
+
+    cache.store_decoded(
+        url.clone(),
+        1,
+        Err("decode failed: invalid emoji".to_owned()),
+    );
+
+    assert!(matches!(
+        cache.entries.get(&url),
+        Some(EmojiImageEntry::Failed { .. })
+    ));
+}
+
+#[test]
+fn emoji_store_decoded_ignores_replaced_decoding_generation() {
+    let url = "https://cdn.discordapp.com/emojis/newer.png".to_owned();
+    let mut cache = emoji_cache_without_picker();
+    cache.entries.insert(
+        url.clone(),
+        EmojiImageEntry::Decoding {
+            generation: 2,
+            last_used: 2,
+        },
+    );
+
+    cache.store_decoded(
+        url.clone(),
+        1,
+        Err("decode failed: old generation".to_owned()),
+    );
+
+    assert!(matches!(
+        cache.entries.get(&url),
+        Some(EmojiImageEntry::Decoding { generation, .. }) if *generation == 2
+    ));
+}
+
+#[test]
 fn emoji_image_cache_evicts_least_recently_used_when_over_capacity() {
-    let mut cache = EmojiImageCache {
-        picker: None,
-        entries: HashMap::new(),
-        tick: 0,
-        protocol_generation: 0,
-    };
+    let mut cache = emoji_cache_without_picker();
     for id in 0..MAX_EMOJI_IMAGE_CACHE_ENTRIES {
         cache.entries.insert(
             format!("https://cdn.discordapp.com/emojis/{id}.png"),

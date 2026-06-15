@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    time::Instant,
-};
+use std::{collections::BTreeMap, time::Instant};
 
 use crate::discord::ids::{
     Id,
@@ -11,10 +8,11 @@ use crate::discord::{ChannelState, ChannelUnreadState, TypingUserState, VoicePar
 
 use super::{ActiveGuildScope, DashboardState, MessagePaneSource, ThreadReturnTarget};
 use super::{
+    channel_tree,
     model::{
         ChannelBranch, ChannelPaneEntry, ChannelThreadItem, FORUM_POST_CARD_HEIGHT, FocusPane,
     },
-    presentation::{is_direct_message_channel, sort_channels, sort_direct_message_channels},
+    presentation::{is_direct_message_channel, sort_direct_message_channels},
     scroll::{
         clamp_list_viewport, clamp_selected_index, pane_content_height, toggle_collapsed_key,
     },
@@ -211,13 +209,7 @@ impl DashboardState {
         &self,
         channel_id: Id<ChannelMarker>,
     ) -> Vec<ChannelThreadItem> {
-        let mut threads: Vec<&ChannelState> = self
-            .channels()
-            .into_iter()
-            .filter(|c| c.is_thread() && c.parent_id == Some(channel_id))
-            .collect();
-        sort_thread_channels(&mut threads);
-        threads
+        channel_tree::sorted_child_threads(self.channels(), channel_id)
             .into_iter()
             .map(|thread| {
                 self.forum_thread_item(thread, None, thread.thread_archived().unwrap_or(false))
@@ -445,40 +437,22 @@ impl DashboardState {
         let mut joined_threads_by_parent: BTreeMap<Id<ChannelMarker>, Vec<&ChannelState>> =
             BTreeMap::new();
         for channel in &channels {
-            if channel.is_thread() && channel.current_user_joined_thread {
-                if let Some(parent_id) = channel.parent_id {
-                    joined_threads_by_parent
-                        .entry(parent_id)
-                        .or_default()
-                        .push(*channel);
-                }
+            if channel.is_thread()
+                && channel.current_user_joined_thread
+                && let Some(parent_id) = channel.parent_id
+            {
+                joined_threads_by_parent
+                    .entry(parent_id)
+                    .or_default()
+                    .push(*channel);
             }
         }
         for threads in joined_threads_by_parent.values_mut() {
-            sort_thread_channels(threads);
+            channel_tree::sort_thread_channels(threads);
         }
 
-        let category_ids: HashSet<Id<ChannelMarker>> = channels
-            .iter()
-            .filter(|channel| channel.is_category())
-            .map(|channel| channel.id)
-            .collect();
-
-        let mut roots: Vec<&ChannelState> = channels
-            .iter()
-            .copied()
-            .filter(|channel| {
-                channel.is_category()
-                    || channel
-                        .parent_id
-                        .is_none_or(|parent_id| !category_ids.contains(&parent_id))
-                        && !channel.is_thread()
-            })
-            .collect();
-        sort_channels(&mut roots);
-
         let mut entries = Vec::new();
-        for root in roots {
+        for root in channel_tree::sorted_channel_tree_roots(&channels) {
             if !root.is_category() {
                 self.push_channel_pane_channel_entry(
                     &mut entries,
@@ -499,26 +473,13 @@ impl DashboardState {
                 collapsed,
             });
 
-            let mut children: Vec<&ChannelState> = channels
-                .iter()
-                .copied()
-                .filter(|channel| {
-                    !channel.is_category()
-                        && !channel.is_thread()
-                        && channel.parent_id == Some(root.id)
-                })
-                .collect();
-            sort_channels(&mut children);
+            let mut children = channel_tree::sorted_category_children(&channels, root.id);
             if collapsed {
                 children.retain(|child| self.collapsed_category_child_visible(child));
             }
-            let last_child_index = children.len().saturating_sub(1);
+            let child_count = children.len();
             for (index, child) in children.into_iter().enumerate() {
-                let branch = if index == last_child_index {
-                    ChannelBranch::Last
-                } else {
-                    ChannelBranch::Middle
-                };
+                let branch = channel_tree::child_branch(index, child_count);
                 self.push_channel_pane_channel_entry(
                     &mut entries,
                     child,
@@ -568,13 +529,8 @@ impl DashboardState {
         threads: &[&'a ChannelState],
         parent_branch: ChannelBranch,
     ) {
-        let last_child_index = threads.len().saturating_sub(1);
         entries.extend(threads.iter().enumerate().map(|(index, &state)| {
-            let branch = if index == last_child_index {
-                ChannelBranch::Last
-            } else {
-                ChannelBranch::Middle
-            };
+            let branch = channel_tree::child_branch(index, threads.len());
             ChannelPaneEntry::Thread {
                 state,
                 parent_branch,
@@ -591,7 +547,7 @@ impl DashboardState {
             .navigation
             .channel_pane_filter
             .as_ref()
-            .map(|f| f.query.trim().to_owned())
+            .map(|f| f.query().trim().to_owned())
             .filter(|q| !q.is_empty());
         let Some(query) = query else {
             return self.channel_pane_entries();
@@ -631,41 +587,14 @@ impl DashboardState {
             return channels;
         }
 
-        let category_ids: HashSet<Id<ChannelMarker>> = channels
-            .iter()
-            .filter(|channel| channel.is_category())
-            .map(|channel| channel.id)
-            .collect();
-        let mut roots: Vec<&ChannelState> = channels
-            .iter()
-            .copied()
-            .filter(|channel| {
-                channel.is_category()
-                    || channel
-                        .parent_id
-                        .is_none_or(|parent_id| !category_ids.contains(&parent_id))
-                        && !channel.is_thread()
-            })
-            .collect();
-        sort_channels(&mut roots);
-
         let mut search_channels = Vec::new();
-        for root in roots {
+        for root in channel_tree::sorted_channel_tree_roots(&channels) {
             if !root.is_category() {
                 search_channels.push(root);
                 continue;
             }
 
-            let mut children: Vec<&ChannelState> = channels
-                .iter()
-                .copied()
-                .filter(|channel| {
-                    !channel.is_category()
-                        && !channel.is_thread()
-                        && channel.parent_id == Some(root.id)
-                })
-                .collect();
-            sort_channels(&mut children);
+            let children = channel_tree::sorted_category_children(&channels, root.id);
             search_channels.extend(children);
         }
         search_channels
@@ -1220,37 +1149,18 @@ impl DashboardState {
         let selected = self.selected_channel();
         match entries.get(selected) {
             Some(ChannelPaneEntry::CategoryHeader { state, .. }) => Some(state.id),
-            Some(ChannelPaneEntry::Channel { branch, .. }) if branch.is_category_child() => entries
-                .get(..selected)?
-                .iter()
-                .rev()
-                .find_map(|entry| match entry {
-                    ChannelPaneEntry::CategoryHeader { state, .. } => Some(state.id),
-                    _ => None,
-                }),
+            Some(ChannelPaneEntry::Channel { branch, .. }) if branch.is_category_child() => {
+                channel_tree::preceding_category_id(&entries, selected)
+            }
             Some(ChannelPaneEntry::Thread { parent_branch, .. })
                 if parent_branch.is_category_child() =>
             {
-                entries
-                    .get(..selected)?
-                    .iter()
-                    .rev()
-                    .find_map(|entry| match entry {
-                        ChannelPaneEntry::CategoryHeader { state, .. } => Some(state.id),
-                        _ => None,
-                    })
+                channel_tree::preceding_category_id(&entries, selected)
             }
             Some(ChannelPaneEntry::VoiceParticipant { parent_branch, .. })
                 if parent_branch.is_category_child() =>
             {
-                entries
-                    .get(..selected)?
-                    .iter()
-                    .rev()
-                    .find_map(|entry| match entry {
-                        ChannelPaneEntry::CategoryHeader { state, .. } => Some(state.id),
-                        _ => None,
-                    })
+                channel_tree::preceding_category_id(&entries, selected)
             }
             _ => None,
         }
@@ -1298,8 +1208,4 @@ fn selectable_channel_index_near(
                     .find_map(|(index, entry)| entry.is_selectable().then_some(index))
             })
     }
-}
-
-fn sort_thread_channels(channels: &mut [&ChannelState]) {
-    channels.sort_by_key(|channel| std::cmp::Reverse(channel.id));
 }

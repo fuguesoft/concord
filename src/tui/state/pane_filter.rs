@@ -1,13 +1,11 @@
-use crate::tui::text_cursor::{clamp_cursor_index, next_char_boundary, previous_char_boundary};
-
 use crate::discord::AppCommand;
+use crate::tui::text_input::TextInputState;
 
 use super::{DashboardState, FocusPane};
 
 #[derive(Debug, Default)]
 pub(super) struct PaneFilterState {
-    pub(super) query: String,
-    pub(super) query_cursor_byte_index: usize,
+    pub(super) query: TextInputState,
     editing: bool,
 }
 
@@ -209,36 +207,26 @@ impl PaneFilterState {
     }
 
     pub(super) fn query(&self) -> &str {
-        &self.query
+        self.query.value()
     }
 
     pub(super) fn cursor_byte_index(&self) -> usize {
-        clamp_cursor_index(&self.query, self.query_cursor_byte_index)
+        self.query.cursor_byte_index()
     }
 
     pub(super) fn push_char(&mut self, value: char) {
-        let cursor = self.cursor_byte_index();
-        self.query.insert(cursor, value);
-        self.query_cursor_byte_index = cursor + value.len_utf8();
+        self.query.insert_char(value);
     }
 
     pub(super) fn pop_char(&mut self) {
-        let cursor = self.cursor_byte_index();
-        if cursor == 0 {
-            return;
-        }
-        let start = previous_char_boundary(&self.query, cursor);
-        self.query.replace_range(start..cursor, "");
-        self.query_cursor_byte_index = start;
+        self.query.delete_previous_grapheme();
     }
 
     pub(super) fn cursor_left(&mut self) {
-        let cursor = self.cursor_byte_index();
-        self.query_cursor_byte_index = previous_char_boundary(&self.query, cursor);
+        self.query.move_left();
     }
 
     pub(super) fn cursor_right(&mut self) {
-        let cursor = self.cursor_byte_index();
-        self.query_cursor_byte_index = next_char_boundary(&self.query, cursor);
+        self.query.move_right();
     }
 }

@@ -8,10 +8,7 @@ use crate::discord::{
     UserProfileUpdate,
 };
 use crate::tui::keybindings::KeyChord;
-use crate::tui::text_cursor::{
-    clamp_cursor_index, next_char_boundary, next_word_boundary, previous_char_boundary,
-    previous_word_boundary,
-};
+use crate::tui::text_input::TextInputState;
 
 use super::super::model::{FocusPane, MemberActionItem, MemberActionKind};
 use super::super::{ActiveGuildScope, DashboardState};
@@ -172,8 +169,7 @@ impl DashboardState {
         if let Some(popup) = self.popups.user_profile_popup_mut()
             && popup.settings.editing.take().is_some()
         {
-            popup.settings.edit_buffer.clear();
-            popup.settings.edit_cursor_byte_index = 0;
+            popup.settings.edit_input.clear();
             return;
         }
         self.close_user_profile_popup();
@@ -218,12 +214,7 @@ impl DashboardState {
     pub(in crate::tui) fn user_profile_settings_edit_cursor_byte_index(&self) -> usize {
         self.popups
             .user_profile_popup()
-            .map(|popup| {
-                clamp_cursor_index(
-                    &popup.settings.edit_buffer,
-                    popup.settings.edit_cursor_byte_index,
-                )
-            })
+            .map(|popup| popup.settings.edit_input.cursor_byte_index())
             .unwrap_or(0)
     }
 
@@ -298,7 +289,7 @@ impl DashboardState {
             return String::new();
         };
         if popup.settings.editing == Some(field) {
-            return popup.settings.edit_buffer.clone();
+            return popup.settings.edit_input.value().to_owned();
         }
         let profile = self.user_profile_popup_data();
         match field {
@@ -406,11 +397,10 @@ impl DashboardState {
             == Some(field)
         {
             if let Some(popup) = self.popups.user_profile_popup_mut() {
-                let value = popup.settings.edit_buffer.clone();
+                let value = popup.settings.edit_input.value().to_owned();
                 popup.settings.set_field_value(field, value);
                 popup.settings.editing = None;
-                popup.settings.edit_buffer.clear();
-                popup.settings.edit_cursor_byte_index = 0;
+                popup.settings.edit_input.clear();
                 popup.settings.status = None;
             }
             if field == UserProfileSettingsField::ManualActivity {
@@ -427,8 +417,7 @@ impl DashboardState {
         let value = self.user_profile_settings_field_value(field);
         if let Some(popup) = self.popups.user_profile_popup_mut() {
             popup.settings.editing = Some(field);
-            popup.settings.edit_buffer = value;
-            popup.settings.edit_cursor_byte_index = popup.settings.edit_buffer.len();
+            popup.settings.edit_input.set_value(value);
         }
         None
     }
@@ -452,8 +441,7 @@ impl DashboardState {
                 .unwrap_or(0);
             picker.select(selected);
             popup.settings.editing = None;
-            popup.settings.edit_buffer.clear();
-            popup.settings.edit_cursor_byte_index = 0;
+            popup.settings.edit_input.clear();
             popup.settings.status_picker = Some(picker);
         }
     }
@@ -519,12 +507,7 @@ impl DashboardState {
         if let Some(popup) = self.popups.user_profile_popup_mut()
             && popup.settings.editing.is_some()
         {
-            let cursor = clamp_cursor_index(
-                &popup.settings.edit_buffer,
-                popup.settings.edit_cursor_byte_index,
-            );
-            popup.settings.edit_buffer.insert_str(cursor, value);
-            popup.settings.edit_cursor_byte_index = cursor + value.len();
+            popup.settings.edit_input.insert_str(value);
         }
     }
 
@@ -535,16 +518,7 @@ impl DashboardState {
         if let Some(popup) = self.popups.user_profile_popup_mut()
             && popup.settings.editing.is_some()
         {
-            let cursor = clamp_cursor_index(
-                &popup.settings.edit_buffer,
-                popup.settings.edit_cursor_byte_index,
-            );
-            if cursor == 0 {
-                return;
-            }
-            let start = previous_char_boundary(&popup.settings.edit_buffer, cursor);
-            popup.settings.edit_buffer.replace_range(start..cursor, "");
-            popup.settings.edit_cursor_byte_index = start;
+            popup.settings.edit_input.delete_previous_grapheme();
         }
     }
 
@@ -555,52 +529,42 @@ impl DashboardState {
         if let Some(popup) = self.popups.user_profile_popup_mut()
             && popup.settings.editing.is_some()
         {
-            let end = clamp_cursor_index(
-                &popup.settings.edit_buffer,
-                popup.settings.edit_cursor_byte_index,
-            );
-            let start = previous_word_boundary(&popup.settings.edit_buffer, end);
-            popup.settings.edit_buffer.replace_range(start..end, "");
-            popup.settings.edit_cursor_byte_index = start;
+            popup.settings.edit_input.delete_previous_word();
         }
     }
 
     pub fn move_user_profile_edit_cursor_left(&mut self) {
-        self.move_user_profile_edit_cursor_with(previous_char_boundary);
+        self.move_user_profile_edit_cursor_with(|input| input.move_left());
     }
 
     pub fn move_user_profile_edit_cursor_right(&mut self) {
-        self.move_user_profile_edit_cursor_with(next_char_boundary);
+        self.move_user_profile_edit_cursor_with(|input| input.move_right());
     }
 
     pub fn move_user_profile_edit_cursor_word_left(&mut self) {
-        self.move_user_profile_edit_cursor_with(previous_word_boundary);
+        self.move_user_profile_edit_cursor_with(|input| input.move_word_left());
     }
 
     pub fn move_user_profile_edit_cursor_word_right(&mut self) {
-        self.move_user_profile_edit_cursor_with(next_word_boundary);
+        self.move_user_profile_edit_cursor_with(|input| input.move_word_right());
     }
 
     pub fn move_user_profile_edit_cursor_home(&mut self) {
-        self.move_user_profile_edit_cursor_with(|_, _| 0);
+        self.move_user_profile_edit_cursor_with(|input| input.move_home());
     }
 
     pub fn move_user_profile_edit_cursor_end(&mut self) {
-        self.move_user_profile_edit_cursor_with(|value, _| value.len());
+        self.move_user_profile_edit_cursor_with(|input| input.move_end());
     }
 
-    fn move_user_profile_edit_cursor_with(&mut self, update: impl FnOnce(&str, usize) -> usize) {
+    fn move_user_profile_edit_cursor_with(&mut self, update: impl FnOnce(&mut TextInputState)) {
         if !self.is_current_user_profile_popup() {
             return;
         }
         if let Some(popup) = self.popups.user_profile_popup_mut()
             && popup.settings.editing.is_some()
         {
-            let cursor = clamp_cursor_index(
-                &popup.settings.edit_buffer,
-                popup.settings.edit_cursor_byte_index,
-            );
-            popup.settings.edit_cursor_byte_index = update(&popup.settings.edit_buffer, cursor);
+            update(&mut popup.settings.edit_input);
         }
     }
 
@@ -619,8 +583,7 @@ impl DashboardState {
         }
         if let Some(popup) = self.popups.user_profile_popup_mut() {
             popup.settings.editing = None;
-            popup.settings.edit_buffer.clear();
-            popup.settings.edit_cursor_byte_index = 0;
+            popup.settings.edit_input.clear();
             popup.settings.status = Some("Reading clipboard image...".to_owned());
         }
         self.request_paste_clipboard();
@@ -637,8 +600,7 @@ impl DashboardState {
         if let Some(popup) = self.popups.user_profile_popup_mut() {
             popup.settings.set_avatar_upload(upload);
             popup.settings.editing = None;
-            popup.settings.edit_buffer.clear();
-            popup.settings.edit_cursor_byte_index = 0;
+            popup.settings.edit_input.clear();
             popup.settings.status = None;
             return true;
         }

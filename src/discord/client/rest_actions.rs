@@ -1,0 +1,283 @@
+use chrono::{DateTime, Utc};
+
+use super::DiscordClient;
+use crate::discord::{
+    MessageAttachmentUpload, MessageInfo, ReactionEmoji, ReactionUserInfo, UserProfileInfo,
+    UserProfileUpdate,
+    commands::ForumPostArchiveState,
+    ids::{
+        Id,
+        marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker},
+    },
+    rest::ForumPostPage,
+};
+use crate::{AppError, Result};
+
+impl DiscordClient {
+    pub async fn prime_rest_pool(&self) -> Result<()> {
+        self.rest.prime_connection_pool().await
+    }
+
+    pub async fn send_message(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        content: &str,
+        reply_to: Option<Id<MessageMarker>>,
+        attachments: &[MessageAttachmentUpload],
+    ) -> Result<MessageInfo> {
+        self.ensure_can_send_message(channel_id, attachments)?;
+        self.rest
+            .send_message(channel_id, content, reply_to, attachments)
+            .await
+    }
+
+    pub async fn send_tts_message(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        content: &str,
+    ) -> Result<MessageInfo> {
+        self.ensure_can_send_tts_message(channel_id)?;
+        self.rest.send_tts_message(channel_id, content).await
+    }
+
+    pub(super) fn ensure_can_send_message(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        attachments: &[MessageAttachmentUpload],
+    ) -> Result<()> {
+        let state = self
+            .state
+            .read()
+            .expect("discord state lock is not poisoned");
+        let Some(channel) = state.channel(channel_id) else {
+            return Ok(());
+        };
+        if !state.can_send_in_channel(channel) {
+            return Err(AppError::DiscordRequest(
+                "cannot send message in channel".to_owned(),
+            ));
+        }
+        if !attachments.is_empty() && !state.can_attach_in_channel(channel) {
+            return Err(AppError::DiscordRequest(
+                "cannot attach files in channel".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn ensure_can_send_tts_message(&self, channel_id: Id<ChannelMarker>) -> Result<()> {
+        let state = self
+            .state
+            .read()
+            .expect("discord state lock is not poisoned");
+        let Some(channel) = state.channel(channel_id) else {
+            return Ok(());
+        };
+        if !state.can_send_tts_in_channel(channel) {
+            return Err(AppError::DiscordRequest(
+                "cannot send text-to-speech messages in channel".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn edit_message(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        content: &str,
+    ) -> Result<MessageInfo> {
+        self.rest
+            .edit_message(channel_id, message_id, content)
+            .await
+    }
+
+    pub async fn delete_message(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+    ) -> Result<()> {
+        self.rest.delete_message(channel_id, message_id).await
+    }
+
+    pub async fn leave_guild(&self, guild_id: Id<GuildMarker>) -> Result<()> {
+        self.rest.leave_guild(guild_id).await
+    }
+
+    pub async fn ack_channel(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+    ) -> Result<()> {
+        self.rest.ack_channel(channel_id, message_id).await
+    }
+
+    pub async fn set_guild_muted(
+        &self,
+        guild_id: Id<GuildMarker>,
+        muted: bool,
+        mute_end_time: Option<DateTime<Utc>>,
+        selected_time_window: Option<i64>,
+    ) -> Result<()> {
+        self.rest
+            .set_guild_muted(guild_id, muted, mute_end_time, selected_time_window)
+            .await
+    }
+
+    pub async fn set_channel_muted(
+        &self,
+        guild_id: Option<Id<GuildMarker>>,
+        channel_id: Id<ChannelMarker>,
+        muted: bool,
+        mute_end_time: Option<DateTime<Utc>>,
+        selected_time_window: Option<i64>,
+    ) -> Result<()> {
+        self.rest
+            .set_channel_muted(
+                guild_id,
+                channel_id,
+                muted,
+                mute_end_time,
+                selected_time_window,
+            )
+            .await
+    }
+
+    pub async fn ack_channels(
+        &self,
+        targets: &[(Id<ChannelMarker>, Id<MessageMarker>)],
+    ) -> Result<()> {
+        self.rest.ack_channels(targets).await
+    }
+
+    pub async fn load_message_history(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        before: Option<Id<MessageMarker>>,
+        limit: u16,
+    ) -> Result<Vec<MessageInfo>> {
+        self.rest
+            .load_message_history(channel_id, before, limit)
+            .await
+    }
+
+    pub async fn load_message_history_around(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        limit: u16,
+    ) -> Result<Vec<MessageInfo>> {
+        self.rest
+            .load_message_history_around(channel_id, message_id, limit)
+            .await
+    }
+
+    pub async fn load_message_history_after(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        limit: u16,
+    ) -> Result<Vec<MessageInfo>> {
+        self.rest
+            .load_message_history_after(channel_id, message_id, limit)
+            .await
+    }
+
+    pub async fn search_messages(
+        &self,
+        query: crate::discord::MessageSearchQuery,
+    ) -> Result<crate::discord::MessageSearchPage> {
+        self.rest.search_messages(query).await
+    }
+
+    pub async fn load_forum_posts(
+        &self,
+        guild_id: Id<GuildMarker>,
+        channel_id: Id<ChannelMarker>,
+        archive_state: ForumPostArchiveState,
+        offset: usize,
+    ) -> Result<ForumPostPage> {
+        self.rest
+            .load_forum_posts(guild_id, channel_id, archive_state, offset)
+            .await
+    }
+
+    pub async fn add_reaction(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        emoji: &ReactionEmoji,
+    ) -> Result<()> {
+        self.rest.add_reaction(channel_id, message_id, emoji).await
+    }
+
+    pub async fn remove_current_user_reaction(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        emoji: &ReactionEmoji,
+    ) -> Result<()> {
+        self.rest
+            .remove_current_user_reaction(channel_id, message_id, emoji)
+            .await
+    }
+
+    pub async fn load_reaction_users(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        emoji: &ReactionEmoji,
+    ) -> Result<Vec<ReactionUserInfo>> {
+        self.rest
+            .load_reaction_users(channel_id, message_id, emoji)
+            .await
+    }
+
+    pub async fn load_pinned_messages(
+        &self,
+        channel_id: Id<ChannelMarker>,
+    ) -> Result<Vec<MessageInfo>> {
+        self.rest.load_pinned_messages(channel_id).await
+    }
+
+    pub async fn set_message_pinned(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        pinned: bool,
+    ) -> Result<()> {
+        self.rest
+            .set_message_pinned(channel_id, message_id, pinned)
+            .await
+    }
+
+    pub async fn vote_poll(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        answer_ids: &[u8],
+    ) -> Result<()> {
+        self.rest
+            .vote_poll(channel_id, message_id, answer_ids)
+            .await
+    }
+
+    pub async fn load_user_profile(
+        &self,
+        user_id: Id<UserMarker>,
+        guild_id: Option<Id<GuildMarker>>,
+        is_self: bool,
+    ) -> Result<UserProfileInfo> {
+        self.rest
+            .load_user_profile(user_id, guild_id, is_self)
+            .await
+    }
+
+    pub async fn load_user_note(&self, user_id: Id<UserMarker>) -> Result<Option<String>> {
+        self.rest.load_user_note(user_id).await
+    }
+
+    pub async fn update_user_profile(&self, update: &UserProfileUpdate) -> Result<()> {
+        self.rest.update_user_profile(update).await
+    }
+}

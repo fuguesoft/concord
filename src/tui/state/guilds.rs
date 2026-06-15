@@ -123,7 +123,7 @@ impl DashboardState {
             .navigation
             .guild_pane_filter
             .as_ref()
-            .map(|f| f.query.trim().to_owned())
+            .map(|f| f.query().trim().to_owned())
             .filter(|q| !q.is_empty());
         let Some(query) = query else {
             return self.guild_pane_entries();

@@ -1,10 +1,8 @@
-use reqwest::header::AUTHORIZATION;
-
+use crate::Result;
 use crate::discord::ids::{
     Id,
     marker::{ChannelMarker, MessageMarker},
 };
-use crate::{AppError, Result};
 
 use super::DiscordRest;
 
@@ -20,18 +18,13 @@ impl DiscordRest {
             channel_id.get(),
             message_id.get()
         );
-        self.raw_http
-            .put(url)
-            .header(AUTHORIZATION, &self.token)
-            .json(&poll_vote_request_body(answer_ids))
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("poll vote request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("poll vote failed: {error}")))?;
-        Ok(())
+        self.send_unit(
+            self.raw_http
+                .put(url)
+                .json(&poll_vote_request_body(answer_ids)),
+            "poll vote",
+        )
+        .await
     }
 }
 

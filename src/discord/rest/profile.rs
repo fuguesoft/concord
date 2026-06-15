@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-use reqwest::{StatusCode, header::AUTHORIZATION};
+use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::discord::ids::{
@@ -34,20 +34,9 @@ impl DiscordRest {
         if let Some(guild_id) = guild_id {
             url.push_str(&format!("guild_id={}", guild_id.get()));
         }
-        let response = self
-            .raw_http
-            .get(url)
-            .header(AUTHORIZATION, &self.token)
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("user profile request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("user profile failed: {error}")))?;
-        let body: Value = response.json().await.map_err(|error| {
-            AppError::DiscordRequest(format!("user profile decode failed: {error}"))
-        })?;
+        let body: Value = self
+            .send_json(self.raw_http.get(url), "user profile")
+            .await?;
 
         Ok(parse_user_profile_response(user_id, &body, None))
     }
@@ -63,9 +52,7 @@ impl DiscordRest {
             user_id.get()
         );
         let response = self
-            .raw_http
-            .get(url)
-            .header(AUTHORIZATION, &self.token)
+            .authenticated(self.raw_http.get(url))
             .send()
             .await
             .map_err(|error| {
@@ -109,82 +96,50 @@ impl DiscordRest {
             );
         }
         if !user_body.is_empty() {
-            self.raw_http
-                .patch("https://discord.com/api/v9/users/@me")
-                .header(AUTHORIZATION, &self.token)
-                .json(&Value::Object(user_body))
-                .send()
-                .await
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!(
-                        "global profile update request failed: {error}"
-                    ))
-                })?
-                .error_for_status()
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!("global profile update failed: {error}"))
-                })?;
+            self.send_unit(
+                self.raw_http
+                    .patch("https://discord.com/api/v9/users/@me")
+                    .json(&Value::Object(user_body)),
+                "global profile update",
+            )
+            .await?;
         }
         if let Some(pronouns) = &update.pronouns {
-            self.raw_http
-                .patch("https://discord.com/api/v9/users/@me/profile")
-                .header(AUTHORIZATION, &self.token)
-                .json(&json!({ "pronouns": pronouns }))
-                .send()
-                .await
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!(
-                        "profile pronouns update request failed: {error}"
-                    ))
-                })?
-                .error_for_status()
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!("profile pronouns update failed: {error}"))
-                })?;
+            self.send_unit(
+                self.raw_http
+                    .patch("https://discord.com/api/v9/users/@me/profile")
+                    .json(&json!({ "pronouns": pronouns })),
+                "profile pronouns update",
+            )
+            .await?;
         }
         Ok(())
     }
 
     async fn update_guild_user_profile(&self, update: &GuildUserProfileUpdate) -> Result<()> {
         if let Some(nickname) = &update.nickname {
-            self.raw_http
-                .patch(format!(
-                    "https://discord.com/api/v9/guilds/{}/members/@me",
-                    update.guild_id.get()
-                ))
-                .header(AUTHORIZATION, &self.token)
-                .json(&json!({ "nick": nullable_text_value(nickname) }))
-                .send()
-                .await
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!(
-                        "guild nickname update request failed: {error}"
+            self.send_unit(
+                self.raw_http
+                    .patch(format!(
+                        "https://discord.com/api/v9/guilds/{}/members/@me",
+                        update.guild_id.get()
                     ))
-                })?
-                .error_for_status()
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!("guild nickname update failed: {error}"))
-                })?;
+                    .json(&json!({ "nick": nullable_text_value(nickname) })),
+                "guild nickname update",
+            )
+            .await?;
         }
         if let Some(pronouns) = &update.pronouns {
-            self.raw_http
-                .patch(format!(
-                    "https://discord.com/api/v9/guilds/{}/profile/@me",
-                    update.guild_id.get()
-                ))
-                .header(AUTHORIZATION, &self.token)
-                .json(&json!({ "pronouns": pronouns }))
-                .send()
-                .await
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!(
-                        "guild profile update request failed: {error}"
+            self.send_unit(
+                self.raw_http
+                    .patch(format!(
+                        "https://discord.com/api/v9/guilds/{}/profile/@me",
+                        update.guild_id.get()
                     ))
-                })?
-                .error_for_status()
-                .map_err(|error| {
-                    AppError::DiscordRequest(format!("guild profile update failed: {error}"))
-                })?;
+                    .json(&json!({ "pronouns": pronouns })),
+                "guild profile update",
+            )
+            .await?;
         }
         Ok(())
     }

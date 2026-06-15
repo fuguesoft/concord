@@ -13,7 +13,8 @@ use super::{
     GuildFolder, GuildNotificationSettingsInfo, MemberInfo, MentionInfo, MessageInfo,
     MessageInteractionInfo, MessageKind, MessageReferenceInfo, MessageSnapshotInfo, PollInfo,
     PresenceStatus, ReactionUsersInfo, ReadStateInfo, RelationshipInfo, ReplyInfo, RoleInfo,
-    UserProfileInfo, VoiceConnectionStatus, VoiceServerInfo, VoiceSoundKind, VoiceStateInfo,
+    SnapshotAreas, UserProfileInfo, VoiceConnectionStatus, VoiceServerInfo, VoiceSoundKind,
+    VoiceStateInfo,
 };
 
 #[cfg(test)]
@@ -513,59 +514,140 @@ pub struct SequencedAppEvent {
     pub event: AppEvent,
 }
 
-impl AppEvent {
-    pub fn mutates_discord_state(&self) -> bool {
-        !matches!(
-            self,
-            AppEvent::GatewayError { .. }
-                | AppEvent::MediaPlaybackWindowReady { .. }
-                | AppEvent::CurrentUserCapabilities { .. }
-                | AppEvent::ApplicationCommandsLoaded { .. }
-                | AppEvent::AttachmentDownloadStarted { .. }
-                | AppEvent::AttachmentDownloadProgress { .. }
-                | AppEvent::AttachmentDownloadCompleted { .. }
-                | AppEvent::AttachmentDownloadFailed { .. }
-                | AppEvent::UpdateAvailable { .. }
-                | AppEvent::ReactionUsersLoaded { .. }
-                | AppEvent::AttachmentPreviewLoaded { .. }
-                | AppEvent::AttachmentPreviewLoadFailed { .. }
-                | AppEvent::ThreadPreviewLoadFailed { .. }
-                | AppEvent::ForumPostsLoadFailed { .. }
-                | AppEvent::MessageSearchLoadFailed { .. }
-                | AppEvent::MessageHistoryLoadFailed { .. }
-                | AppEvent::PinnedMessagesLoadFailed { .. }
-                | AppEvent::UserProfileLoadFailed { .. }
-                | AppEvent::UserProfileUpdateFailed { .. }
-                | AppEvent::VoiceServerUpdate { .. }
-                | AppEvent::VoiceConnectionStatusChanged { .. }
-                | AppEvent::VoiceSound { .. }
-                | AppEvent::ActivateChannel { .. }
-                | AppEvent::GatewayResumed
-                | AppEvent::GatewayReidentified
-                | AppEvent::GatewayClosed
-        )
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct AppEventMetadata {
+    pub(crate) mutates_discord_state: bool,
+    pub(crate) needs_effect_delivery: bool,
+    pub(crate) snapshot_areas: Option<SnapshotAreas>,
+}
+
+impl AppEventMetadata {
+    const fn mutating(snapshot_areas: SnapshotAreas) -> Self {
+        Self {
+            mutates_discord_state: true,
+            needs_effect_delivery: false,
+            snapshot_areas: Some(snapshot_areas),
+        }
     }
 
-    pub fn needs_effect_delivery(&self) -> bool {
+    const fn mutating_effect(snapshot_areas: SnapshotAreas) -> Self {
+        Self {
+            mutates_discord_state: true,
+            needs_effect_delivery: true,
+            snapshot_areas: Some(snapshot_areas),
+        }
+    }
+
+    const fn effect_only() -> Self {
+        Self {
+            mutates_discord_state: false,
+            needs_effect_delivery: true,
+            snapshot_areas: None,
+        }
+    }
+
+    const fn inert() -> Self {
+        Self {
+            mutates_discord_state: false,
+            needs_effect_delivery: false,
+            snapshot_areas: None,
+        }
+    }
+}
+
+impl AppEvent {
+    pub(crate) fn metadata(&self) -> AppEventMetadata {
         match self {
-            AppEvent::ChannelUpsert(channel) => channel_upsert_needs_effect_delivery(channel),
-            AppEvent::MessageCreate { .. }
-            | AppEvent::MessageHistoryLoaded { .. }
+            AppEvent::GuildCreate { .. }
+            | AppEvent::GuildUpdate { .. }
+            | AppEvent::GuildDelete { .. }
+            | AppEvent::ThreadMembersUpdate { .. }
+            | AppEvent::ChannelDelete { .. }
+            | AppEvent::Ready { .. } => AppEventMetadata::mutating(SnapshotAreas::all()),
+
+            AppEvent::ChannelUpsert(channel) => {
+                if channel_upsert_needs_effect_delivery(channel) {
+                    AppEventMetadata::mutating_effect(SnapshotAreas::all())
+                } else {
+                    AppEventMetadata::mutating(SnapshotAreas::all())
+                }
+            }
+
+            AppEvent::ForumPostsLoaded { .. } => {
+                AppEventMetadata::mutating_effect(SnapshotAreas::all())
+            }
+
+            AppEvent::MessageCreate { .. } => {
+                AppEventMetadata::mutating_effect(SnapshotAreas::navigation_and_message())
+            }
+
+            AppEvent::MessageHistoryLoaded { .. }
             | AppEvent::MessageHistoryRefreshed { .. }
             | AppEvent::MessageHistoryAfterLoaded { .. }
             | AppEvent::MessageHistoryCatchUpLoaded { .. }
             | AppEvent::MessageHistoryAroundLoaded { .. }
-            | AppEvent::MessageHistoryLoadFailed { .. }
-            | AppEvent::ThreadPreviewLoaded { .. }
-            | AppEvent::ThreadPreviewLoadFailed { .. }
-            | AppEvent::ForumPostsLoaded { .. }
-            | AppEvent::ForumPostsLoadFailed { .. }
             | AppEvent::MessageSearchLoaded { .. }
-            | AppEvent::MessageSearchLoadFailed { .. }
-            | AppEvent::PinnedMessagesLoaded { .. }
-            | AppEvent::PinnedMessagesLoadFailed { .. }
-            | AppEvent::ReactionUsersLoaded { .. }
-            | AppEvent::GatewayError { .. }
+            | AppEvent::ThreadPreviewLoaded { .. }
+            | AppEvent::PinnedMessagesLoaded { .. } => {
+                AppEventMetadata::mutating_effect(SnapshotAreas::message())
+            }
+
+            AppEvent::MessageUpdate { .. }
+            | AppEvent::CurrentUserReactionAdd { .. }
+            | AppEvent::CurrentUserReactionRemove { .. }
+            | AppEvent::MessageReactionAdd { .. }
+            | AppEvent::MessageReactionRemove { .. }
+            | AppEvent::MessageReactionRemoveAll { .. }
+            | AppEvent::MessageReactionRemoveEmoji { .. }
+            | AppEvent::MessagePinnedUpdate { .. }
+            | AppEvent::ChannelPinsUpdate { .. }
+            | AppEvent::CurrentUserPollVoteUpdate { .. }
+            | AppEvent::MessageDelete { .. }
+            | AppEvent::MessageDeleteBulk { .. } => {
+                AppEventMetadata::mutating(SnapshotAreas::message())
+            }
+
+            AppEvent::SelectedMessageChannelChanged { .. } => {
+                AppEventMetadata::mutating(SnapshotAreas::navigation_and_message())
+            }
+
+            AppEvent::UserProfileLoaded { .. } => {
+                AppEventMetadata::mutating_effect(SnapshotAreas::navigation_and_message())
+            }
+
+            AppEvent::GuildMemberAdd { .. }
+            | AppEvent::GuildMemberUpsert { .. }
+            | AppEvent::RelationshipsLoaded { .. }
+            | AppEvent::RelationshipUpsert { .. }
+            | AppEvent::UserIdentityUpdate { .. }
+            | AppEvent::RelationshipRemove { .. } => {
+                AppEventMetadata::mutating(SnapshotAreas::navigation_and_message())
+            }
+
+            AppEvent::SelectedGuildChanged { .. }
+            | AppEvent::GuildRolesUpdate { .. }
+            | AppEvent::GuildRoleUpsert { .. }
+            | AppEvent::GuildRoleDelete { .. }
+            | AppEvent::GuildEmojisUpdate { .. }
+            | AppEvent::GuildMemberListCounts { .. }
+            | AppEvent::GuildMemberRemove { .. }
+            | AppEvent::PresenceUpdate { .. }
+            | AppEvent::UserPresenceUpdate { .. }
+            | AppEvent::VoiceStateUpdate { .. }
+            | AppEvent::VoiceSpeakingUpdate { .. }
+            | AppEvent::TypingStart { .. }
+            | AppEvent::GuildFoldersUpdate { .. }
+            | AppEvent::UserNoteLoaded { .. }
+            | AppEvent::UserGuildNotificationSettingsInit { .. }
+            | AppEvent::UserGuildNotificationSettingsUpdate { .. } => {
+                AppEventMetadata::mutating(SnapshotAreas::navigation())
+            }
+
+            AppEvent::ReadStateInit { .. } | AppEvent::MessageAck { .. } => {
+                AppEventMetadata::mutating(SnapshotAreas::navigation_and_detail())
+            }
+
+            AppEvent::GatewayError { .. }
             | AppEvent::MediaPlaybackWindowReady { .. }
             | AppEvent::CurrentUserCapabilities { .. }
             | AppEvent::ApplicationCommandsLoaded { .. }
@@ -574,19 +656,37 @@ impl AppEvent {
             | AppEvent::AttachmentDownloadCompleted { .. }
             | AppEvent::AttachmentDownloadFailed { .. }
             | AppEvent::UpdateAvailable { .. }
-            | AppEvent::ActivateChannel { .. }
+            | AppEvent::ReactionUsersLoaded { .. }
             | AppEvent::AttachmentPreviewLoaded { .. }
             | AppEvent::AttachmentPreviewLoadFailed { .. }
-            | AppEvent::VoiceConnectionStatusChanged { .. }
-            | AppEvent::VoiceSound { .. }
-            | AppEvent::UserProfileLoaded { .. }
+            | AppEvent::ThreadPreviewLoadFailed { .. }
+            | AppEvent::ForumPostsLoadFailed { .. }
+            | AppEvent::MessageSearchLoadFailed { .. }
+            | AppEvent::MessageHistoryLoadFailed { .. }
+            | AppEvent::PinnedMessagesLoadFailed { .. }
             | AppEvent::UserProfileLoadFailed { .. }
             | AppEvent::UserProfileUpdateFailed { .. }
+            | AppEvent::VoiceConnectionStatusChanged { .. }
+            | AppEvent::VoiceSound { .. }
+            | AppEvent::ActivateChannel { .. }
             | AppEvent::GatewayResumed
             | AppEvent::GatewayReidentified
-            | AppEvent::GatewayClosed => true,
-            _ => false,
+            | AppEvent::GatewayClosed => AppEventMetadata::effect_only(),
+
+            AppEvent::VoiceServerUpdate { .. } => AppEventMetadata::inert(),
         }
+    }
+
+    pub fn mutates_discord_state(&self) -> bool {
+        self.metadata().mutates_discord_state
+    }
+
+    pub fn needs_effect_delivery(&self) -> bool {
+        self.metadata().needs_effect_delivery
+    }
+
+    pub(crate) fn snapshot_areas(&self) -> Option<SnapshotAreas> {
+        self.metadata().snapshot_areas
     }
 }
 

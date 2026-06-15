@@ -1,4 +1,5 @@
 mod avatar;
+mod decode;
 mod emoji;
 mod lru;
 mod preview;
@@ -6,14 +7,18 @@ mod protocol;
 mod targets;
 
 pub(super) use avatar::AvatarImageCache;
+pub(super) use decode::{MediaImageDecodeKey, MediaImageDecodeResult, spawn_media_image_decode};
 pub(super) use emoji::EmojiImageCache;
-pub(super) use preview::{ImagePreviewCache, ImagePreviewDecodeResult, spawn_image_preview_decode};
+pub(super) use preview::ImagePreviewCache;
 #[cfg(test)]
 use targets::image_preview_height_for_dimensions;
 pub(super) use targets::{
     AvatarTarget, EmojiImageTarget, ImagePreviewTarget, image_preview_album_layout,
-    visible_avatar_targets, visible_emoji_image_targets, visible_image_preview_targets,
+    visible_avatar_targets_from_plan, visible_emoji_image_targets,
+    visible_image_preview_targets_from_plan,
 };
+#[cfg(test)]
+pub(super) use targets::{visible_avatar_targets, visible_image_preview_targets};
 
 use protocol::{
     AVATAR_PREVIEW_HEIGHT, AVATAR_PREVIEW_WIDTH, ImagePreviewRenderInfo, avatar_preview_url,
@@ -23,6 +28,8 @@ pub(super) use protocol::{PROFILE_POPUP_AVATAR_HEIGHT, PROFILE_POPUP_AVATAR_WIDT
 
 #[cfg(test)]
 use avatar::{AvatarImageEntry, AvatarProtocolKey, MAX_AVATAR_IMAGE_CACHE_ENTRIES};
+#[cfg(test)]
+use decode::{MAX_DECODED_IMAGE_HEIGHT, MAX_DECODED_IMAGE_WIDTH, decode_image_bytes};
 #[cfg(test)]
 use emoji::{EmojiImageEntry, MAX_EMOJI_IMAGE_CACHE_ENTRIES};
 #[cfg(test)]

@@ -300,10 +300,68 @@ impl VisibleDashboardChangeSet {
 pub(in crate::tui) fn visible_dashboard_signature(
     state: &DashboardState,
 ) -> VisibleDashboardSignature {
-    let member_start = state.member_scroll();
-    let member_end = member_start.saturating_add(state.member_content_height());
+    VisibleDashboardSignature {
+        layout: layout_signature(state),
+        header: header_signature(state),
+        overlay: overlay_signature(state),
+        passive_overlay: passive_overlay_signature(state),
+        guilds: guild_pane_signature(state),
+        channels: channel_pane_signature(state),
+        messages: message_pane_signature(state),
+        members: member_pane_signature(state),
+    }
+}
+
+fn layout_signature(state: &DashboardState) -> LayoutSignature {
+    LayoutSignature {
+        focus: state.focus(),
+        guild_pane_visible: state.is_pane_visible(state::FocusPane::Guilds),
+        channel_pane_visible: state.is_pane_visible(state::FocusPane::Channels),
+        member_pane_visible: state.is_pane_visible(state::FocusPane::Members),
+        selected_guild_id: state.selected_guild_id(),
+        selected_channel_id: state.selected_channel_id(),
+    }
+}
+
+fn header_signature(state: &DashboardState) -> HeaderSignature {
+    HeaderSignature {
+        current_user: state.current_user().map(str::to_owned),
+        current_voice_self_status: state.current_voice_self_status(),
+        update_available_version: state.update_available_version().map(str::to_owned),
+    }
+}
+
+fn overlay_signature(state: &DashboardState) -> OverlaySignature {
     let channel_switcher_open = state.is_active_modal_popup(ActiveModalPopupKind::ChannelSwitcher);
     let leader_active = state.is_active_modal_popup(ActiveModalPopupKind::Leader);
+    let channel_switcher_items = if channel_switcher_open {
+        state.channel_switcher_items()
+    } else {
+        Vec::new()
+    };
+    OverlaySignature {
+        leader_active,
+        leader_action_mode: state.is_leader_action_mode(),
+        leader_title: leader_active.then(|| state.leader_keymap_title()),
+        leader_shortcuts: state
+            .leader_keymap_shortcuts()
+            .into_iter()
+            .map(|item| (item.key, item.label, item.has_children))
+            .collect(),
+        channel_switcher: ChannelSwitcherSignature {
+            open: channel_switcher_open,
+            query: state.channel_switcher_query().map(str::to_owned),
+            query_cursor: state.channel_switcher_query_cursor_byte_index(),
+            selected: state.selected_channel_switcher_index(),
+            result_count: channel_switcher_items.len(),
+            items: channel_switcher_item_signature(&channel_switcher_items),
+        },
+        channel_action_threads_phase: state.is_channel_action_threads_phase(),
+        popups: visible_popup_signature(state),
+    }
+}
+
+fn visible_popup_signature(state: &DashboardState) -> VisiblePopupSignature {
     let message_action_open = state.is_message_action_context_active();
     let message_url_picker_open =
         state.is_active_modal_popup(ActiveModalPopupKind::MessageUrlPicker);
@@ -318,263 +376,238 @@ pub(in crate::tui) fn visible_dashboard_signature(
     let keymap_help_open = state.is_active_modal_popup(ActiveModalPopupKind::KeymapHelp);
     let quit_confirmation_open =
         state.is_active_modal_popup(ActiveModalPopupKind::QuitConfirmation);
-    let channel_switcher_items = if channel_switcher_open {
-        state.channel_switcher_items()
-    } else {
-        Vec::new()
-    };
-    VisibleDashboardSignature {
-        layout: LayoutSignature {
-            focus: state.focus(),
-            guild_pane_visible: state.is_pane_visible(state::FocusPane::Guilds),
-            channel_pane_visible: state.is_pane_visible(state::FocusPane::Channels),
-            member_pane_visible: state.is_pane_visible(state::FocusPane::Members),
-            selected_guild_id: state.selected_guild_id(),
-            selected_channel_id: state.selected_channel_id(),
-        },
-        header: HeaderSignature {
-            current_user: state.current_user().map(str::to_owned),
-            current_voice_self_status: state.current_voice_self_status(),
-            update_available_version: state.update_available_version().map(str::to_owned),
-        },
-        overlay: OverlaySignature {
-            leader_active,
-            leader_action_mode: state.is_leader_action_mode(),
-            leader_title: leader_active.then(|| state.leader_keymap_title()),
-            leader_shortcuts: state
-                .leader_keymap_shortcuts()
-                .into_iter()
-                .map(|item| (item.key, item.label, item.has_children))
-                .collect(),
-            channel_switcher: ChannelSwitcherSignature {
-                open: channel_switcher_open,
-                query: state.channel_switcher_query().map(str::to_owned),
-                query_cursor: state.channel_switcher_query_cursor_byte_index(),
-                selected: state.selected_channel_switcher_index(),
-                result_count: channel_switcher_items.len(),
-                items: channel_switcher_item_signature(&channel_switcher_items),
+
+    VisiblePopupSignature {
+        message_actions: MessageActionPopupSignature {
+            message_action_open,
+            selected_message_action_index: state.selected_message_action_index(),
+            message_action_items: if message_action_open {
+                debug_signature(&state.selected_message_action_items())
+            } else {
+                debug_signature(&())
             },
-            channel_action_threads_phase: state.is_channel_action_threads_phase(),
-            popups: VisiblePopupSignature {
-                message_actions: MessageActionPopupSignature {
-                    message_action_open,
-                    selected_message_action_index: state.selected_message_action_index(),
-                    message_action_items: if message_action_open {
-                        debug_signature(&state.selected_message_action_items())
-                    } else {
-                        debug_signature(&())
-                    },
-                    delete_confirmation_lines: state.message_delete_confirmation_lines(),
-                    pin_confirmation_lines: state.message_pin_confirmation_lines(),
-                    quit_confirmation_open,
-                },
-                message_url_picker: MessageUrlPickerPopupSignature {
-                    message_url_picker_open,
-                    selected_message_url_index: state.selected_message_url_index(),
-                    message_url_items: if message_url_picker_open {
-                        debug_signature(&state.selected_message_url_items())
-                    } else {
-                        debug_signature(&())
-                    },
-                },
-                attachment_viewer: AttachmentViewerPopupSignature {
-                    attachment_viewer_open,
-                    selected_attachment_viewer_item: debug_signature(
-                        &state.selected_attachment_viewer_item(),
-                    ),
-                },
-                leaders: LeaderPopupSignature {
-                    guild_leader_action_open: state.is_guild_leader_action_active(),
-                    guild_action_items: debug_signature(&state.selected_guild_action_items()),
-                    channel_leader_action_open: state.is_channel_leader_action_active(),
-                    selected_channel_action_index: state.selected_channel_action_index(),
-                    channel_action_items: debug_signature(&state.selected_channel_action_items()),
-                    channel_thread_items: debug_signature(&state.channel_action_thread_items()),
-                    member_leader_action_open: state.is_member_leader_action_active(),
-                    member_action_items: debug_signature(&state.selected_member_action_items()),
-                },
-                options: OptionsPopupSignature {
-                    options_open,
-                    options_title: state.options_popup_title(),
-                    selected_option: state.selected_option_index(),
-                    display_options: state.display_options(),
-                    notification_options: state.notification_options(),
-                    voice_options: state.voice_options(),
-                },
-                message_interactions: MessageInteractionPopupSignature {
-                    emoji_picker_open,
-                    selected_emoji_reaction_index: if emoji_picker_open {
-                        state.selected_emoji_reaction_index_for_len(
-                            state.filtered_emoji_reaction_items().len(),
-                        )
-                    } else {
-                        None
-                    },
-                    emoji_reaction_filter: state.emoji_reaction_filter().map(str::to_owned),
-                    filtered_emoji_reaction_items: if emoji_picker_open {
-                        debug_signature(&state.filtered_emoji_reaction_items())
-                    } else {
-                        debug_signature(&())
-                    },
-                    existing_emoji_reactions: if emoji_picker_open {
-                        debug_signature(&state.existing_emoji_reactions())
-                    } else {
-                        debug_signature(&())
-                    },
-                    own_emoji_reactions: if emoji_picker_open {
-                        debug_signature(&state.own_emoji_reactions())
-                    } else {
-                        debug_signature(&())
-                    },
-                    reaction_users_open,
-                    reaction_users_popup: debug_signature(&state.reaction_users_popup()),
-                    poll_vote_picker_open,
-                    selected_poll_vote_picker_index: state.selected_poll_vote_picker_index(),
-                    poll_vote_picker_items: debug_signature(&state.poll_vote_picker_items()),
-                },
-                profile: ProfilePopupSignature {
-                    user_profile_open,
-                    user_profile_data: debug_signature(&state.user_profile_popup_data()),
-                    user_profile_error: state.user_profile_popup_load_error().map(str::to_owned),
-                    user_profile_status: state.user_profile_popup_status(),
-                    user_profile_settings: debug_signature(&(
-                        state.user_profile_settings_tab(),
-                        state.user_profile_settings_active_field(),
-                        state.user_profile_settings_editing_field(),
-                        state.user_profile_settings_status(),
-                        state.user_profile_settings_presence_status(),
-                        state.user_profile_settings_dirty_count(),
-                        state.user_profile_settings_saving(),
-                        state.user_profile_status_picker_rows(),
-                    )),
-                    user_profile_scroll: state.user_profile_popup_scroll(),
-                    user_profile_avatar_url: state
-                        .user_profile_popup_pending_avatar_preview_key()
-                        .map(str::to_owned)
-                        .or_else(|| state.user_profile_popup_avatar_url().map(str::to_owned)),
-                    user_profile_activities: debug_signature(
-                        &state.user_profile_popup_activities(),
-                    ),
-                },
-                diagnostics: DiagnosticsPopupSignature {
-                    debug_log_open,
-                    debug_log_lines: if debug_log_open {
-                        debug_signature(&state.debug_log_lines())
-                    } else {
-                        debug_signature(&())
-                    },
-                    debug_channel_visibility: if debug_log_open {
-                        debug_signature(&state.debug_channel_visibility())
-                    } else {
-                        debug_signature(&())
-                    },
-                    keymap_help_open,
-                    keymap_help: if keymap_help_open {
-                        debug_signature(&state.keymap_binding_summaries())
-                    } else {
-                        debug_signature(&())
-                    },
-                    keymap_popup_scroll: state.keymap_popup_scroll(),
-                },
-                search: debug_signature(&state.search_popup_view()),
+            delete_confirmation_lines: state.message_delete_confirmation_lines(),
+            pin_confirmation_lines: state.message_pin_confirmation_lines(),
+            quit_confirmation_open,
+        },
+        message_url_picker: MessageUrlPickerPopupSignature {
+            message_url_picker_open,
+            selected_message_url_index: state.selected_message_url_index(),
+            message_url_items: if message_url_picker_open {
+                debug_signature(&state.selected_message_url_items())
+            } else {
+                debug_signature(&())
             },
         },
-        passive_overlay: PassiveOverlaySignature {
-            attachment_downloads: state
-                .attachment_downloads()
-                .into_iter()
-                .map(|download| debug_signature(&download))
-                .collect(),
+        attachment_viewer: AttachmentViewerPopupSignature {
+            attachment_viewer_open,
+            selected_attachment_viewer_item: debug_signature(
+                &state.selected_attachment_viewer_item(),
+            ),
         },
-        guilds: GuildPaneSignature {
-            guild_horizontal_scroll: state.guild_horizontal_scroll(),
-            visible_guilds: state
-                .visible_guild_pane_entries()
-                .into_iter()
-                .map(|entry| {
-                    if matches!(entry, state::GuildPaneEntry::DirectMessages) {
-                        return GuildEntrySignature {
-                            row: debug_signature(&entry),
-                            unread_count: Some(state.direct_message_unread_count()),
-                            unread_state: None,
-                        };
-                    }
-                    if let Some(guild) = entry.guild_state() {
-                        return GuildEntrySignature {
-                            row: debug_signature(&entry),
-                            unread_count: None,
-                            unread_state: Some(state.sidebar_guild_unread(guild.id)),
-                        };
-                    }
-                    GuildEntrySignature {
+        leaders: LeaderPopupSignature {
+            guild_leader_action_open: state.is_guild_leader_action_active(),
+            guild_action_items: debug_signature(&state.selected_guild_action_items()),
+            channel_leader_action_open: state.is_channel_leader_action_active(),
+            selected_channel_action_index: state.selected_channel_action_index(),
+            channel_action_items: debug_signature(&state.selected_channel_action_items()),
+            channel_thread_items: debug_signature(&state.channel_action_thread_items()),
+            member_leader_action_open: state.is_member_leader_action_active(),
+            member_action_items: debug_signature(&state.selected_member_action_items()),
+        },
+        options: OptionsPopupSignature {
+            options_open,
+            options_title: state.options_popup_title(),
+            selected_option: state.selected_option_index(),
+            display_options: state.display_options(),
+            notification_options: state.notification_options(),
+            voice_options: state.voice_options(),
+        },
+        message_interactions: MessageInteractionPopupSignature {
+            emoji_picker_open,
+            selected_emoji_reaction_index: if emoji_picker_open {
+                state.selected_emoji_reaction_index_for_len(
+                    state.filtered_emoji_reaction_items().len(),
+                )
+            } else {
+                None
+            },
+            emoji_reaction_filter: state.emoji_reaction_filter().map(str::to_owned),
+            filtered_emoji_reaction_items: if emoji_picker_open {
+                debug_signature(&state.filtered_emoji_reaction_items())
+            } else {
+                debug_signature(&())
+            },
+            existing_emoji_reactions: if emoji_picker_open {
+                debug_signature(&state.existing_emoji_reactions())
+            } else {
+                debug_signature(&())
+            },
+            own_emoji_reactions: if emoji_picker_open {
+                debug_signature(&state.own_emoji_reactions())
+            } else {
+                debug_signature(&())
+            },
+            reaction_users_open,
+            reaction_users_popup: debug_signature(&state.reaction_users_popup()),
+            poll_vote_picker_open,
+            selected_poll_vote_picker_index: state.selected_poll_vote_picker_index(),
+            poll_vote_picker_items: debug_signature(&state.poll_vote_picker_items()),
+        },
+        profile: ProfilePopupSignature {
+            user_profile_open,
+            user_profile_data: debug_signature(&state.user_profile_popup_data()),
+            user_profile_error: state.user_profile_popup_load_error().map(str::to_owned),
+            user_profile_status: state.user_profile_popup_status(),
+            user_profile_settings: debug_signature(&(
+                state.user_profile_settings_tab(),
+                state.user_profile_settings_active_field(),
+                state.user_profile_settings_editing_field(),
+                state.user_profile_settings_status(),
+                state.user_profile_settings_presence_status(),
+                state.user_profile_settings_dirty_count(),
+                state.user_profile_settings_saving(),
+                state.user_profile_status_picker_rows(),
+            )),
+            user_profile_scroll: state.user_profile_popup_scroll(),
+            user_profile_avatar_url: state
+                .user_profile_popup_pending_avatar_preview_key()
+                .map(str::to_owned)
+                .or_else(|| state.user_profile_popup_avatar_url().map(str::to_owned)),
+            user_profile_activities: debug_signature(&state.user_profile_popup_activities()),
+        },
+        diagnostics: DiagnosticsPopupSignature {
+            debug_log_open,
+            debug_log_lines: if debug_log_open {
+                debug_signature(&state.debug_log_lines())
+            } else {
+                debug_signature(&())
+            },
+            debug_channel_visibility: if debug_log_open {
+                debug_signature(&state.debug_channel_visibility())
+            } else {
+                debug_signature(&())
+            },
+            keymap_help_open,
+            keymap_help: if keymap_help_open {
+                debug_signature(&state.keymap_binding_summaries())
+            } else {
+                debug_signature(&())
+            },
+            keymap_popup_scroll: state.keymap_popup_scroll(),
+        },
+        search: debug_signature(&state.search_popup_view()),
+    }
+}
+
+fn passive_overlay_signature(state: &DashboardState) -> PassiveOverlaySignature {
+    PassiveOverlaySignature {
+        attachment_downloads: state
+            .attachment_downloads()
+            .into_iter()
+            .map(|download| debug_signature(&download))
+            .collect(),
+    }
+}
+
+fn guild_pane_signature(state: &DashboardState) -> GuildPaneSignature {
+    GuildPaneSignature {
+        guild_horizontal_scroll: state.guild_horizontal_scroll(),
+        visible_guilds: state
+            .visible_guild_pane_entries()
+            .into_iter()
+            .map(|entry| {
+                if matches!(entry, state::GuildPaneEntry::DirectMessages) {
+                    return GuildEntrySignature {
+                        row: debug_signature(&entry),
+                        unread_count: Some(state.direct_message_unread_count()),
+                        unread_state: None,
+                    };
+                }
+                if let Some(guild) = entry.guild_state() {
+                    return GuildEntrySignature {
                         row: debug_signature(&entry),
                         unread_count: None,
-                        unread_state: None,
-                    }
-                })
-                .collect(),
-        },
-        channels: ChannelPaneSignature {
-            channel_horizontal_scroll: state.channel_horizontal_scroll(),
-            visible_channels: state
-                .visible_channel_pane_entries()
-                .into_iter()
-                .map(|entry| {
-                    if let Some(channel) = entry.channel_state() {
-                        return ChannelEntrySignature {
-                            row: debug_signature(&entry),
-                            unread: Some(state.channel_unread(channel.id)),
-                            unread_message_count: Some(
-                                state.channel_unread_message_count(channel.id),
-                            ),
-                        };
-                    }
-                    ChannelEntrySignature {
+                        unread_state: Some(state.sidebar_guild_unread(guild.id)),
+                    };
+                }
+                GuildEntrySignature {
+                    row: debug_signature(&entry),
+                    unread_count: None,
+                    unread_state: None,
+                }
+            })
+            .collect(),
+    }
+}
+
+fn channel_pane_signature(state: &DashboardState) -> ChannelPaneSignature {
+    ChannelPaneSignature {
+        channel_horizontal_scroll: state.channel_horizontal_scroll(),
+        visible_channels: state
+            .visible_channel_pane_entries()
+            .into_iter()
+            .map(|entry| {
+                if let Some(channel) = entry.channel_state() {
+                    return ChannelEntrySignature {
                         row: debug_signature(&entry),
-                        unread: None,
-                        unread_message_count: None,
-                    }
-                })
-                .collect(),
-        },
-        messages: MessagePaneSignature {
-            source: state.message_pane_source(),
-            selected_message: state.selected_message(),
-            message_scroll: state.message_scroll(),
-            message_line_scroll: state.message_line_scroll(),
-            new_messages_count: state.new_messages_count(),
-            message_pane_title: state.message_pane_title(),
-            typing_footer: state.typing_footer_for_selected_channel(),
-            composer_picker: composer_picker_signature(state),
-            visible_messages: state
-                .visible_messages()
-                .into_iter()
-                .map(debug_signature)
-                .collect(),
-            visible_forum_posts: state
-                .visible_forum_post_items()
-                .into_iter()
-                .map(|post| debug_signature(&post))
-                .collect(),
-        },
-        members: MemberPaneSignature {
-            selected_member: state.selected_member(),
-            member_scroll: state.member_scroll(),
-            member_horizontal_scroll: state.member_horizontal_scroll(),
-            visible_members: state
-                .flattened_members()
-                .into_iter()
-                .skip(member_start)
-                .take(member_end.saturating_sub(member_start))
-                .map(|entry| MemberEntrySignature {
-                    user_id: entry.user_id(),
-                    display_name: entry.display_name(),
-                    username: entry.username(),
-                    is_bot: entry.is_bot(),
-                    status: entry.status(),
-                })
-                .collect(),
-        },
+                        unread: Some(state.channel_unread(channel.id)),
+                        unread_message_count: Some(state.channel_unread_message_count(channel.id)),
+                    };
+                }
+                ChannelEntrySignature {
+                    row: debug_signature(&entry),
+                    unread: None,
+                    unread_message_count: None,
+                }
+            })
+            .collect(),
+    }
+}
+
+fn message_pane_signature(state: &DashboardState) -> MessagePaneSignature {
+    MessagePaneSignature {
+        source: state.message_pane_source(),
+        selected_message: state.selected_message(),
+        message_scroll: state.message_scroll(),
+        message_line_scroll: state.message_line_scroll(),
+        new_messages_count: state.new_messages_count(),
+        message_pane_title: state.message_pane_title(),
+        typing_footer: state.typing_footer_for_selected_channel(),
+        composer_picker: composer_picker_signature(state),
+        visible_messages: state
+            .visible_messages()
+            .into_iter()
+            .map(debug_signature)
+            .collect(),
+        visible_forum_posts: state
+            .visible_forum_post_items()
+            .into_iter()
+            .map(|post| debug_signature(&post))
+            .collect(),
+    }
+}
+
+fn member_pane_signature(state: &DashboardState) -> MemberPaneSignature {
+    let member_start = state.member_scroll();
+    let member_end = member_start.saturating_add(state.member_content_height());
+    MemberPaneSignature {
+        selected_member: state.selected_member(),
+        member_scroll: state.member_scroll(),
+        member_horizontal_scroll: state.member_horizontal_scroll(),
+        visible_members: state
+            .flattened_members()
+            .into_iter()
+            .skip(member_start)
+            .take(member_end.saturating_sub(member_start))
+            .map(|entry| MemberEntrySignature {
+                user_id: entry.user_id(),
+                display_name: entry.display_name(),
+                username: entry.username(),
+                is_bot: entry.is_bot(),
+                status: entry.status(),
+            })
+            .collect(),
     }
 }
 

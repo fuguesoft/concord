@@ -6,7 +6,7 @@ use super::super::model::{
     ChannelActionItem, ChannelActionKind, ChannelPaneEntry, ChannelThreadItem, FocusPane,
     MUTE_ACTION_DURATIONS,
 };
-use super::super::{DashboardState, MuteActionDurationItem};
+use super::super::{DashboardState, MuteActionDurationItem, channel_tree};
 use super::ChannelLeaderActionState;
 #[cfg(test)]
 use super::{LeaderActionState, LeaderMode, LeaderPopupState, ModalPopup};
@@ -88,11 +88,7 @@ impl DashboardState {
         let Some(channel) = self.discord.cache.channel(channel_id) else {
             return Vec::new();
         };
-        let thread_count = self
-            .channels()
-            .into_iter()
-            .filter(|c| c.is_thread() && c.parent_id == Some(channel_id))
-            .count();
+        let thread_count = channel_tree::child_thread_count(self.channels(), channel_id);
         let thread_label = if thread_count == 0 {
             "Show threads (none)".to_owned()
         } else {

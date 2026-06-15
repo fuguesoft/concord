@@ -1,12 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
 use crate::discord::ids::{Id, marker::MessageMarker};
 use image::DynamicImage;
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
-use tokio::{sync::mpsc, task};
 
 use crate::{
     discord::{AppCommand, AppEvent},
@@ -14,14 +13,15 @@ use crate::{
 };
 
 use super::{
-    ImagePreviewRenderInfo, ImagePreviewTarget, clipped_preview_image, lru, query_image_picker,
+    ImagePreviewRenderInfo, ImagePreviewTarget, clipped_preview_image,
+    decode::{MediaImageDecodeJob, MediaImageDecodeKey},
+    lru, query_image_picker,
 };
 
 pub(super) const MAX_IMAGE_PREVIEW_CACHE_ENTRIES: usize = 16;
-const MAX_CONCURRENT_IMAGE_PREVIEW_DECODES: usize = 2;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(super) struct ImagePreviewKey {
+pub(in crate::tui) struct ImagePreviewKey {
     viewer: bool,
     message_id: Id<MessageMarker>,
     preview_index: usize,
@@ -34,18 +34,6 @@ pub(in crate::tui) struct ImagePreviewCache {
     pub(super) tick: u64,
     pub(super) decode_generation: u64,
     pub(super) protocol_generation: u64,
-}
-
-pub(in crate::tui) struct ImagePreviewDecodeJob {
-    pub(super) key: ImagePreviewKey,
-    pub(super) generation: u64,
-    pub(super) bytes: Arc<[u8]>,
-}
-
-pub(in crate::tui) struct ImagePreviewDecodeResult {
-    pub(super) key: ImagePreviewKey,
-    pub(super) generation: u64,
-    pub(super) result: std::result::Result<DynamicImage, String>,
 }
 
 pub(super) enum ImagePreviewEntry {
@@ -223,7 +211,7 @@ impl ImagePreviewCache {
         intents
     }
 
-    pub(in crate::tui) fn record_event(&mut self, event: &AppEvent) -> Vec<ImagePreviewDecodeJob> {
+    pub(in crate::tui) fn record_event(&mut self, event: &AppEvent) -> Vec<MediaImageDecodeJob> {
         match event {
             AppEvent::AttachmentPreviewLoaded { url, bytes } => self.store_loaded(url, bytes),
             AppEvent::AttachmentPreviewLoadFailed { url, message } => {
@@ -234,7 +222,7 @@ impl ImagePreviewCache {
         }
     }
 
-    pub(super) fn store_loaded(&mut self, url: &str, bytes: &[u8]) -> Vec<ImagePreviewDecodeJob> {
+    pub(super) fn store_loaded(&mut self, url: &str, bytes: &[u8]) -> Vec<MediaImageDecodeJob> {
         let keys = self.loading_keys_for_url(url);
         if keys.is_empty() {
             return Vec::new();
@@ -263,7 +251,7 @@ impl ImagePreviewCache {
         &mut self,
         keys: Vec<ImagePreviewKey>,
         bytes: &[u8],
-    ) -> Vec<ImagePreviewDecodeJob> {
+    ) -> Vec<MediaImageDecodeJob> {
         let bytes: Arc<[u8]> = Arc::from(bytes.to_vec());
         let mut jobs = Vec::new();
         for key in keys {
@@ -291,8 +279,8 @@ impl ImagePreviewCache {
                     last_used,
                 },
             );
-            jobs.push(ImagePreviewDecodeJob {
-                key,
+            jobs.push(MediaImageDecodeJob {
+                key: MediaImageDecodeKey::Preview(key),
                 generation,
                 bytes: bytes.clone(),
             });
@@ -300,35 +288,38 @@ impl ImagePreviewCache {
         jobs
     }
 
-    pub(in crate::tui) fn store_decoded(&mut self, result: ImagePreviewDecodeResult) {
-        let Some((filename, generation, render_info)) =
-            self.entries.get(&result.key).and_then(|entry| {
-                if let ImagePreviewEntry::Decoding {
-                    filename,
-                    generation,
-                    render_info,
-                    ..
-                } = entry
-                {
-                    Some((filename.clone(), *generation, *render_info))
-                } else {
-                    None
-                }
-            })
-        else {
+    pub(in crate::tui) fn store_decoded(
+        &mut self,
+        key: ImagePreviewKey,
+        result_generation: u64,
+        result: std::result::Result<DynamicImage, String>,
+    ) {
+        let Some((filename, generation, render_info)) = self.entries.get(&key).and_then(|entry| {
+            if let ImagePreviewEntry::Decoding {
+                filename,
+                generation,
+                render_info,
+                ..
+            } = entry
+            {
+                Some((filename.clone(), *generation, *render_info))
+            } else {
+                None
+            }
+        }) else {
             return;
         };
 
-        if generation != result.generation {
+        if generation != result_generation {
             return;
         }
 
         let last_used = lru::next_tick(&mut self.tick);
-        match result.result {
+        match result {
             Ok(image) => {
                 let Some(picker) = self.picker.as_ref() else {
                     self.entries.insert(
-                        result.key,
+                        key,
                         ImagePreviewEntry::Failed {
                             filename,
                             message: "inline preview unavailable in this terminal".to_owned(),
@@ -340,7 +331,7 @@ impl ImagePreviewCache {
                 let Some(protocol) = clipped_preview_stateful_protocol(picker, &image, render_info)
                 else {
                     self.entries.insert(
-                        result.key,
+                        key,
                         ImagePreviewEntry::Failed {
                             filename,
                             message: "inline preview dimensions unavailable".to_owned(),
@@ -350,7 +341,7 @@ impl ImagePreviewCache {
                     return;
                 };
                 self.entries.insert(
-                    result.key,
+                    key,
                     ImagePreviewEntry::Ready {
                         filename,
                         image,
@@ -363,7 +354,7 @@ impl ImagePreviewCache {
             }
             Err(message) => {
                 self.entries.insert(
-                    result.key,
+                    key,
                     ImagePreviewEntry::Failed {
                         filename,
                         message,
@@ -510,41 +501,9 @@ fn tick_entry(entry: &mut ImagePreviewEntry, tick: &mut u64) {
     }
 }
 
-pub(in crate::tui) fn spawn_image_preview_decode(
-    job: ImagePreviewDecodeJob,
-    tx: mpsc::UnboundedSender<ImagePreviewDecodeResult>,
-) {
-    let decode_permits = image_preview_decode_permits().clone();
-    task::spawn(async move {
-        let Ok(_permit) = decode_permits.acquire_owned().await else {
-            return;
-        };
-        if let Ok(result) = task::spawn_blocking(move || decode_image_preview(job)).await {
-            let _ = tx.send(result);
-        }
-    });
-}
-
-fn image_preview_decode_permits() -> &'static Arc<tokio::sync::Semaphore> {
-    static PERMITS: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
-    PERMITS.get_or_init(|| {
-        Arc::new(tokio::sync::Semaphore::new(
-            MAX_CONCURRENT_IMAGE_PREVIEW_DECODES,
-        ))
-    })
-}
-
-fn decode_image_preview(job: ImagePreviewDecodeJob) -> ImagePreviewDecodeResult {
-    let result = decode_original_preview_image(&job.bytes);
-    ImagePreviewDecodeResult {
-        key: job.key,
-        generation: job.generation,
-        result,
-    }
-}
-
+#[cfg(test)]
 pub(super) fn decode_original_preview_image(
     bytes: &[u8],
 ) -> std::result::Result<DynamicImage, String> {
-    image::load_from_memory(bytes).map_err(|error| format!("decode failed: {error}"))
+    super::decode::decode_image_bytes(bytes)
 }

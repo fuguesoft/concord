@@ -1,12 +1,9 @@
 use std::collections::HashSet;
 
 use crate::discord::{ChannelState, ChannelUnreadState};
-use crate::tui::text_cursor::{clamp_cursor_index, next_char_boundary, previous_char_boundary};
+use crate::tui::text_input::TextInputState;
 use crate::{
-    discord::ids::{
-        Id,
-        marker::{ChannelMarker, GuildMarker},
-    },
+    discord::ids::{Id, marker::GuildMarker},
     tui::fuzzy::{FuzzyMatchQuality, FuzzyScore, fuzzy_name_match_score},
 };
 
@@ -14,17 +11,16 @@ use crate::tui::fuzzy::fuzzy_text_score;
 use crate::tui::keybindings::SelectionAction;
 
 use super::super::{
-    ActiveGuildScope, DashboardState,
+    ActiveGuildScope, DashboardState, channel_tree,
     model::{ChannelBranch, ChannelSwitcherItem, GuildPaneEntry},
-    presentation::{is_direct_message_channel, sort_channels, sort_direct_message_channels},
+    presentation::{is_direct_message_channel, sort_direct_message_channels},
 };
 use crate::discord::AppCommand;
 use crate::tui::state::popups::{ActiveModalPopupKind, ModalPopup, SelectablePopupState};
 
 #[derive(Debug)]
 pub(in crate::tui::state) struct ChannelSwitcherState {
-    query: String,
-    query_cursor_byte_index: usize,
+    query: TextInputState,
     selection: SelectablePopupState,
     base_items: Vec<ChannelSwitcherItem>,
     query_items: Option<Vec<ChannelSwitcherItem>>,
@@ -33,8 +29,7 @@ pub(in crate::tui::state) struct ChannelSwitcherState {
 impl ChannelSwitcherState {
     fn new(base_items: Vec<ChannelSwitcherItem>) -> Self {
         Self {
-            query: String::new(),
-            query_cursor_byte_index: 0,
+            query: TextInputState::default(),
             selection: SelectablePopupState::default(),
             base_items,
             query_items: None,
@@ -50,7 +45,7 @@ impl ChannelSwitcherState {
     }
 
     fn refresh_query_items(&mut self) {
-        let query = self.query.trim();
+        let query = self.query.value().trim();
         self.query_items =
             (!query.is_empty()).then(|| filter_channel_switcher_items(&self.base_items, query));
     }
@@ -73,15 +68,12 @@ impl DashboardState {
     pub fn channel_switcher_query(&self) -> Option<&str> {
         self.popups
             .channel_switcher()
-            .map(|switcher| switcher.query.as_str())
+            .map(|switcher| switcher.query.value())
     }
 
     pub fn channel_switcher_query_cursor_byte_index(&self) -> Option<usize> {
         let switcher = self.popups.channel_switcher()?;
-        Some(clamp_cursor_index(
-            &switcher.query,
-            switcher.query_cursor_byte_index,
-        ))
+        Some(switcher.query.cursor_byte_index())
     }
 
     pub fn selected_channel_switcher_index(&self) -> Option<usize> {
@@ -132,9 +124,7 @@ impl DashboardState {
 
     pub fn push_channel_switcher_char(&mut self, value: char) {
         if let Some(switcher) = self.popups.channel_switcher_mut() {
-            let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
-            switcher.query.insert(cursor, value);
-            switcher.query_cursor_byte_index = cursor + value.len_utf8();
+            switcher.query.insert_char(value);
             switcher.selection.select(0);
             switcher.refresh_query_items();
         }
@@ -142,29 +132,22 @@ impl DashboardState {
 
     pub fn pop_channel_switcher_char(&mut self) {
         if let Some(switcher) = self.popups.channel_switcher_mut() {
-            let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
-            if cursor == 0 {
-                return;
+            if switcher.query.delete_previous_grapheme() {
+                switcher.selection.select(0);
+                switcher.refresh_query_items();
             }
-            let start = previous_char_boundary(&switcher.query, cursor);
-            switcher.query.replace_range(start..cursor, "");
-            switcher.query_cursor_byte_index = start;
-            switcher.selection.select(0);
-            switcher.refresh_query_items();
         }
     }
 
     pub fn move_channel_switcher_query_cursor_left(&mut self) {
         if let Some(switcher) = self.popups.channel_switcher_mut() {
-            let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
-            switcher.query_cursor_byte_index = previous_char_boundary(&switcher.query, cursor);
+            switcher.query.move_left();
         }
     }
 
     pub fn move_channel_switcher_query_cursor_right(&mut self) {
         if let Some(switcher) = self.popups.channel_switcher_mut() {
-            let cursor = clamp_cursor_index(&switcher.query, switcher.query_cursor_byte_index);
-            switcher.query_cursor_byte_index = next_char_boundary(&switcher.query, cursor);
+            switcher.query.move_right();
         }
     }
 
@@ -298,25 +281,8 @@ impl DashboardState {
             .cache
             .viewable_channels_for_guild(Some(guild_id));
         channels.retain(|channel| !channel.is_thread());
-        let category_ids: HashSet<Id<ChannelMarker>> = channels
-            .iter()
-            .filter(|channel| channel.is_category())
-            .map(|channel| channel.id)
-            .collect();
-        let mut roots: Vec<&ChannelState> = channels
-            .iter()
-            .copied()
-            .filter(|channel| {
-                channel.is_category()
-                    || channel
-                        .parent_id
-                        .is_none_or(|parent_id| !category_ids.contains(&parent_id))
-            })
-            .collect();
-        sort_channels(&mut roots);
-
         let group_order = items.len();
-        for root in roots {
+        for root in channel_tree::sorted_channel_tree_roots(&channels) {
             if !root.is_category() {
                 push_channel_switcher_item(
                     items,
@@ -335,19 +301,10 @@ impl DashboardState {
                 continue;
             }
 
-            let mut children: Vec<&ChannelState> = channels
-                .iter()
-                .copied()
-                .filter(|channel| !channel.is_category() && channel.parent_id == Some(root.id))
-                .collect();
-            sort_channels(&mut children);
-            let last_child_index = children.len().saturating_sub(1);
+            let children = channel_tree::sorted_category_children(&channels, root.id);
+            let child_count = children.len();
             for (index, child) in children.into_iter().enumerate() {
-                let branch = if index == last_child_index {
-                    ChannelBranch::Last
-                } else {
-                    ChannelBranch::Middle
-                };
+                let branch = channel_tree::child_branch(index, child_count);
                 push_channel_switcher_item(
                     items,
                     ChannelSwitcherItemInput {

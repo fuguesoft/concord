@@ -22,6 +22,7 @@ use super::{
         format_message_content_sections_with_loaded_custom_emoji_urls, format_message_relative_age,
         lay_out_reaction_chips_with_custom_emoji_images, reaction_line_spans, wrap_text_lines,
     },
+    message::layout::MessageViewportPlan,
     state::{
         ActiveModalPopupKind, AttachmentDownloadProgressView, AttachmentViewerItem,
         ChannelSwitcherItem, ChannelThreadItem, DashboardState, DisplayOptionItem,
@@ -194,6 +195,26 @@ pub fn render(
     emoji_images: Vec<EmojiImage<'_>>,
     profile_avatar: Option<AvatarImage>,
 ) {
+    render_with_message_viewport_plan(
+        frame,
+        state,
+        image_previews,
+        avatar_images,
+        emoji_images,
+        profile_avatar,
+        None,
+    );
+}
+
+pub(in crate::tui) fn render_with_message_viewport_plan(
+    frame: &mut Frame,
+    state: &DashboardState,
+    image_previews: Vec<ImagePreview<'_>>,
+    avatar_images: Vec<AvatarImage>,
+    emoji_images: Vec<EmojiImage<'_>>,
+    profile_avatar: Option<AvatarImage>,
+    message_viewport_plan: Option<&MessageViewportPlan<'_>>,
+) {
     let areas = dashboard_areas(frame.area(), state);
     let mut inline_image_previews = Vec::new();
     let mut viewer_image_preview = None;
@@ -219,6 +240,7 @@ pub fn render(
         inline_image_previews,
         avatar_images,
         &emoji_images,
+        message_viewport_plan,
     );
     if state.is_pane_visible(FocusPane::Members) {
         render_members(frame, areas.members, state, &emoji_images);

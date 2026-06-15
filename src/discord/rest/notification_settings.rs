@@ -1,12 +1,11 @@
 use chrono::{DateTime, SecondsFormat, Utc};
-use reqwest::header::AUTHORIZATION;
 use serde_json::{Value, json};
 
+use crate::Result;
 use crate::discord::ids::{
     Id,
     marker::{ChannelMarker, GuildMarker},
 };
-use crate::{AppError, Result};
 
 use super::DiscordRest;
 
@@ -18,25 +17,20 @@ impl DiscordRest {
         mute_end_time: Option<DateTime<Utc>>,
         selected_time_window: Option<i64>,
     ) -> Result<()> {
-        self.raw_http
-            .patch(format!(
-                "https://discord.com/api/v9/users/@me/guilds/{}/settings",
-                guild_id.get()
-            ))
-            .header(AUTHORIZATION, &self.token)
-            .json(&mute_request_body(
-                muted,
-                mute_end_time,
-                selected_time_window,
-            ))
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("set guild mute request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| AppError::DiscordRequest(format!("set guild mute failed: {error}")))?;
-        Ok(())
+        self.send_unit(
+            self.raw_http
+                .patch(format!(
+                    "https://discord.com/api/v9/users/@me/guilds/{}/settings",
+                    guild_id.get()
+                ))
+                .json(&mute_request_body(
+                    muted,
+                    mute_end_time,
+                    selected_time_window,
+                )),
+            "set guild mute",
+        )
+        .await
     }
 
     pub async fn set_channel_muted(
@@ -54,10 +48,8 @@ impl DiscordRest {
             ),
             None => "https://discord.com/api/v9/users/@me/guilds/@me/settings".to_owned(),
         };
-        self.raw_http
-            .patch(endpoint)
-            .header(AUTHORIZATION, &self.token)
-            .json(&json!({
+        self.send_unit(
+            self.raw_http.patch(endpoint).json(&json!({
                 "channel_overrides": {
                     channel_id.to_string(): mute_request_body(
                         muted,
@@ -65,17 +57,10 @@ impl DiscordRest {
                         selected_time_window,
                     ),
                 }
-            }))
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("set channel mute request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("set channel mute failed: {error}"))
-            })?;
-        Ok(())
+            })),
+            "set channel mute",
+        )
+        .await
     }
 }
 

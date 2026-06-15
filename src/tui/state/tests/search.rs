@@ -76,6 +76,20 @@ fn message_search_fields_use_requested_order_and_placeholders() {
 }
 
 #[test]
+fn search_field_cursor_deletes_grapheme_before_cursor() {
+    let mut state = state_with_writable_channel();
+    state.open_search_popup_for_focus(FocusPane::Messages);
+    type_search_text(&mut state, "가🇰🇷나");
+
+    state.move_search_cursor_left();
+    state.pop_search_char();
+
+    let view = state.search_popup_view().expect("search popup view");
+    assert_eq!(view.fields[0].value, "가나");
+    assert_eq!(view.fields[0].cursor, "가".len());
+}
+
+#[test]
 fn message_search_suggestions_show_names_and_use_selected_ids() {
     {
         let mut state = state_with_writable_channel_and_members();

@@ -943,89 +943,263 @@ fn is_reserved_keymap_chord(chord: KeyChord) -> bool {
     ) || matches!((chord.code, chord.modifiers), (KeyCode::Char(value), KeyModifiers::CONTROL) if matches!(value.to_ascii_lowercase(), 'c' | 'n' | 'p'))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DefaultKeymapChord {
+    Leader,
+    Char(char),
+    Ctrl(char),
+    Key(KeyCode),
+    ModifiedKey(KeyCode, KeyModifiers),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DefaultKeymapDescriptor {
+    action: UiAction,
+    sequences: &'static [&'static [DefaultKeymapChord]],
+}
+
+const DEFAULT_KEYMAP_DESCRIPTORS: &[DefaultKeymapDescriptor] = &[
+    DefaultKeymapDescriptor {
+        action: UiAction::StartComposer,
+        sequences: &[&[DefaultKeymapChord::Char('i')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::OpenPaneFilter,
+        sequences: &[&[DefaultKeymapChord::Char('/')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ClosePopup,
+        sequences: &[&[DefaultKeymapChord::Char('q')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::FocusGuildPane,
+        sequences: &[&[DefaultKeymapChord::Char('1')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::FocusChannelPane,
+        sequences: &[&[DefaultKeymapChord::Char('2')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::FocusMessagePane,
+        sequences: &[&[DefaultKeymapChord::Char('3')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::FocusMemberPane,
+        sequences: &[&[DefaultKeymapChord::Char('4')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::SelectNext,
+        sequences: &[&[DefaultKeymapChord::Char('j')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::SelectPrevious,
+        sequences: &[&[DefaultKeymapChord::Char('k')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::CycleFocusNext,
+        sequences: &[
+            &[DefaultKeymapChord::Key(KeyCode::Tab)],
+            &[DefaultKeymapChord::Char('l')],
+            &[DefaultKeymapChord::Key(KeyCode::Right)],
+        ],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::CycleFocusPrevious,
+        sequences: &[
+            &[DefaultKeymapChord::ModifiedKey(
+                KeyCode::Tab,
+                KeyModifiers::SHIFT,
+            )],
+            &[DefaultKeymapChord::Char('h')],
+            &[DefaultKeymapChord::Key(KeyCode::Left)],
+        ],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::HalfPageDown,
+        sequences: &[&[DefaultKeymapChord::Ctrl('d')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::HalfPageUp,
+        sequences: &[&[DefaultKeymapChord::Ctrl('u')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ScrollViewportDown,
+        sequences: &[&[DefaultKeymapChord::Char('J')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ScrollViewportUp,
+        sequences: &[&[DefaultKeymapChord::Char('K')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::JumpTop,
+        sequences: &[&[DefaultKeymapChord::Char('g'), DefaultKeymapChord::Char('g')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::JumpBottom,
+        sequences: &[&[DefaultKeymapChord::Char('G')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ScrollHorizontalLeft,
+        sequences: &[&[DefaultKeymapChord::Char('H')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ScrollHorizontalRight,
+        sequences: &[&[DefaultKeymapChord::Char('L')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ResizePaneLeft,
+        sequences: &[
+            &[DefaultKeymapChord::ModifiedKey(
+                KeyCode::Char('h'),
+                KeyModifiers::ALT,
+            )],
+            &[DefaultKeymapChord::ModifiedKey(
+                KeyCode::Left,
+                KeyModifiers::ALT,
+            )],
+        ],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ResizePaneRight,
+        sequences: &[
+            &[DefaultKeymapChord::ModifiedKey(
+                KeyCode::Char('l'),
+                KeyModifiers::ALT,
+            )],
+            &[DefaultKeymapChord::ModifiedKey(
+                KeyCode::Right,
+                KeyModifiers::ALT,
+            )],
+        ],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::Quit,
+        sequences: &[&[DefaultKeymapChord::Char('q')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::CopyMessage,
+        sequences: &[&[DefaultKeymapChord::Char('y')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ReactMessage,
+        sequences: &[&[DefaultKeymapChord::Char('r')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ReplyMessage,
+        sequences: &[&[DefaultKeymapChord::Char('R')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::DeleteMessage,
+        sequences: &[&[DefaultKeymapChord::Char('d')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::EditMessage,
+        sequences: &[&[DefaultKeymapChord::Char('e')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::OpenMessageUrl,
+        sequences: &[&[DefaultKeymapChord::Char('o')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::PlayMedia,
+        sequences: &[&[DefaultKeymapChord::Char('x')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ViewMessageAttachment,
+        sequences: &[&[DefaultKeymapChord::Char('v')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ToggleGuildPane,
+        sequences: &[&[DefaultKeymapChord::Leader, DefaultKeymapChord::Char('1')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ToggleChannelPane,
+        sequences: &[&[DefaultKeymapChord::Leader, DefaultKeymapChord::Char('2')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ToggleMemberPane,
+        sequences: &[&[DefaultKeymapChord::Leader, DefaultKeymapChord::Char('4')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::OpenFocusedPaneAction,
+        sequences: &[&[DefaultKeymapChord::Leader, DefaultKeymapChord::Char('a')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::OpenCurrentUserProfile,
+        sequences: &[&[DefaultKeymapChord::Leader, DefaultKeymapChord::Char('p')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::OpenOptions,
+        sequences: &[&[DefaultKeymapChord::Leader, DefaultKeymapChord::Char('o')]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::ChannelSwitcher,
+        sequences: &[&[DefaultKeymapChord::Leader, DefaultKeymapChord::Leader]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::VoiceDeafen,
+        sequences: &[&[
+            DefaultKeymapChord::Leader,
+            DefaultKeymapChord::Char('v'),
+            DefaultKeymapChord::Char('d'),
+        ]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::VoiceMute,
+        sequences: &[&[
+            DefaultKeymapChord::Leader,
+            DefaultKeymapChord::Char('v'),
+            DefaultKeymapChord::Char('m'),
+        ]],
+    },
+    DefaultKeymapDescriptor {
+        action: UiAction::VoiceLeave,
+        sequences: &[&[
+            DefaultKeymapChord::Leader,
+            DefaultKeymapChord::Char('v'),
+            DefaultKeymapChord::Char('l'),
+        ]],
+    },
+];
+
 fn default_keymap_specs(leader: KeyChord) -> BTreeMap<UiAction, KeyMapActionSpec> {
-    let mut specs = BTreeMap::new();
-    for action in all_ui_actions() {
-        let action_sequences = match *action {
-            UiAction::StartComposer => vec![vec![char_chord('i')]],
-            UiAction::OpenPaneFilter => vec![vec![char_chord('/')]],
-            UiAction::ClosePopup => vec![vec![char_chord('q')]],
-            UiAction::FocusGuildPane => vec![vec![char_chord('1')]],
-            UiAction::FocusChannelPane => vec![vec![char_chord('2')]],
-            UiAction::FocusMessagePane => vec![vec![char_chord('3')]],
-            UiAction::FocusMemberPane => vec![vec![char_chord('4')]],
-            UiAction::SelectNext => vec![vec![char_chord('j')]],
-            UiAction::SelectPrevious => vec![vec![char_chord('k')]],
-            UiAction::CycleFocusNext => vec![
-                vec![key_chord(KeyCode::Tab)],
-                vec![char_chord('l')],
-                vec![key_chord(KeyCode::Right)],
-            ],
-            UiAction::CycleFocusPrevious => vec![
-                vec![KeyChord {
-                    code: KeyCode::Tab,
-                    modifiers: KeyModifiers::SHIFT,
-                }],
-                vec![char_chord('h')],
-                vec![key_chord(KeyCode::Left)],
-            ],
-            UiAction::HalfPageDown => vec![vec![ctrl_chord('d')]],
-            UiAction::HalfPageUp => vec![vec![ctrl_chord('u')]],
-            UiAction::ScrollViewportDown => vec![vec![char_chord('J')]],
-            UiAction::ScrollViewportUp => vec![vec![char_chord('K')]],
-            UiAction::JumpTop => vec![vec![char_chord('g'), char_chord('g')]],
-            UiAction::JumpBottom => vec![vec![char_chord('G')]],
-            UiAction::ScrollHorizontalLeft => vec![vec![char_chord('H')]],
-            UiAction::ScrollHorizontalRight => vec![vec![char_chord('L')]],
-            UiAction::ResizePaneLeft => vec![
-                vec![modified_key_chord(KeyCode::Char('h'), KeyModifiers::ALT)],
-                vec![modified_key_chord(KeyCode::Left, KeyModifiers::ALT)],
-            ],
-            UiAction::ResizePaneRight => vec![
-                vec![modified_key_chord(KeyCode::Char('l'), KeyModifiers::ALT)],
-                vec![modified_key_chord(KeyCode::Right, KeyModifiers::ALT)],
-            ],
-            UiAction::Quit => vec![vec![char_chord('q')]],
-            UiAction::CopyMessage => vec![vec![char_chord('y')]],
-            UiAction::ReactMessage => vec![vec![char_chord('r')]],
-            UiAction::ReplyMessage => vec![vec![char_chord('R')]],
-            UiAction::DeleteMessage => vec![vec![char_chord('d')]],
-            UiAction::EditMessage => vec![vec![char_chord('e')]],
-            UiAction::OpenMessageUrl => vec![vec![char_chord('o')]],
-            UiAction::PlayMedia => vec![vec![char_chord('x')]],
-            UiAction::ViewMessageAttachment => vec![vec![char_chord('v')]],
-            UiAction::ShowMessageProfile
-            | UiAction::PinMessage
-            | UiAction::OpenThread
-            | UiAction::ShowReactionUsers
-            | UiAction::OpenPollVotePicker
-            | UiAction::GoToReferencedMessage => Vec::new(),
-            UiAction::ToggleGuildPane => vec![vec![leader, char_chord('1')]],
-            UiAction::ToggleChannelPane => vec![vec![leader, char_chord('2')]],
-            UiAction::ToggleMemberPane => vec![vec![leader, char_chord('4')]],
-            UiAction::OpenFocusedPaneAction => vec![vec![leader, char_chord('a')]],
-            UiAction::OpenCurrentUserProfile => vec![vec![leader, char_chord('p')]],
-            UiAction::OpenOptions => vec![vec![leader, char_chord('o')]],
-            UiAction::ChannelSwitcher => vec![vec![leader, leader]],
-            UiAction::OpenDisplayOptions
-            | UiAction::OpenComposerOptions
-            | UiAction::OpenNotificationOptions
-            | UiAction::OpenVoiceOptions => Vec::new(),
-            UiAction::VoiceDeafen => vec![vec![leader, char_chord('v'), char_chord('d')]],
-            UiAction::VoiceMute => vec![vec![leader, char_chord('v'), char_chord('m')]],
-            UiAction::VoiceLeave => vec![vec![leader, char_chord('v'), char_chord('l')]],
-        };
-        if !action_sequences.is_empty() {
-            specs.insert(
-                *action,
+    DEFAULT_KEYMAP_DESCRIPTORS
+        .iter()
+        .map(|descriptor| {
+            (
+                descriptor.action,
                 KeyMapActionSpec {
-                    sequences: action_sequences,
-                    label: action.label().to_owned(),
+                    sequences: default_keymap_sequences(leader, descriptor.sequences),
+                    label: descriptor.action.label().to_owned(),
                 },
-            );
-        }
+            )
+        })
+        .collect()
+}
+
+fn default_keymap_sequences(
+    leader: KeyChord,
+    sequences: &[&[DefaultKeymapChord]],
+) -> Vec<Vec<KeyChord>> {
+    sequences
+        .iter()
+        .map(|sequence| {
+            sequence
+                .iter()
+                .map(|chord| default_keymap_chord(leader, *chord))
+                .collect()
+        })
+        .collect()
+}
+
+fn default_keymap_chord(leader: KeyChord, chord: DefaultKeymapChord) -> KeyChord {
+    match chord {
+        DefaultKeymapChord::Leader => leader,
+        DefaultKeymapChord::Char(value) => char_chord(value),
+        DefaultKeymapChord::Ctrl(value) => ctrl_chord(value),
+        DefaultKeymapChord::Key(code) => key_chord(code),
+        DefaultKeymapChord::ModifiedKey(code, modifiers) => modified_key_chord(code, modifiers),
     }
-    specs
 }
 
 fn remove_default_keymap_conflicts(

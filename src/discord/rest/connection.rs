@@ -1,6 +1,4 @@
-use reqwest::header::AUTHORIZATION;
-
-use crate::{AppError, Result};
+use crate::Result;
 
 use super::DiscordRest;
 
@@ -13,18 +11,10 @@ impl DiscordRest {
     /// search calls. Priming the pool at startup lets the first real request
     /// reuse the warmed connection and start in single-digit milliseconds.
     pub async fn prime_connection_pool(&self) -> Result<()> {
-        self.raw_http
-            .get("https://discord.com/api/v9/users/@me")
-            .header(AUTHORIZATION, &self.token)
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("connection prime request failed: {error}"))
-            })?
-            .error_for_status()
-            .map_err(|error| {
-                AppError::DiscordRequest(format!("connection prime failed: {error}"))
-            })?;
-        Ok(())
+        self.send_unit(
+            self.raw_http.get("https://discord.com/api/v9/users/@me"),
+            "connection prime",
+        )
+        .await
     }
 }

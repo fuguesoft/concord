@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::super::{
-    message::format::format_message_content_lines,
+    message::{format::format_message_content_lines, layout::MessageViewportPlan},
     selection,
     state::{ActiveModalPopupKind, DashboardState, MAX_MENTION_PICKER_VISIBLE},
     ui::ImagePreviewLayout,
@@ -97,6 +97,7 @@ pub(in crate::tui) struct ImagePreviewAlbumLayout {
     pub(in crate::tui) overflow_count: usize,
 }
 
+#[cfg(test)]
 pub(in crate::tui) fn visible_image_preview_targets(
     state: &DashboardState,
     layout: ImagePreviewLayout,
@@ -139,31 +140,74 @@ pub(in crate::tui) fn visible_image_preview_targets(
         return Vec::new();
     }
 
-    let mut rendered_rows = 0usize;
+    let messages = state.visible_messages();
+    let selected = state.focused_message_selection();
+    let plan = MessageViewportPlan::new(
+        &messages,
+        selected,
+        state,
+        layout.content_width,
+        layout.preview_width,
+        layout.max_preview_height,
+    );
+    visible_image_preview_targets_from_plan(state, layout, &plan)
+}
+
+pub(in crate::tui) fn visible_image_preview_targets_from_plan(
+    state: &DashboardState,
+    layout: ImagePreviewLayout,
+    plan: &MessageViewportPlan<'_>,
+) -> Vec<ImagePreviewTarget> {
+    if let Some((message_id, preview_index, preview)) = state.selected_attachment_viewer_preview()
+        && state.show_images()
+    {
+        let quality = state.image_preview_quality();
+        let (preview_width, preview_height) = image_preview_size_for_dimensions(
+            layout.viewer_preview_width,
+            layout.viewer_max_preview_height,
+            preview.width,
+            preview.height,
+            true,
+            layout.font_size,
+        );
+        if preview_height == 0 {
+            return Vec::new();
+        }
+        return vec![ImagePreviewTarget {
+            viewer: true,
+            message_index: 0,
+            preview_index,
+            preview_x_offset_columns: 0,
+            preview_y_offset_rows: 0,
+            preview_width,
+            preview_height,
+            preview_overflow_count: 0,
+            visible_preview_height: preview_height,
+            top_clip_rows: 0,
+            accent_color: preview.accent_color,
+            show_play_marker: preview.show_play_marker,
+            message_id,
+            url: preview_request_url(preview, preview_width, preview_height, quality),
+            filename: preview.filename.to_owned(),
+        }];
+    }
+
+    if !state.show_images() {
+        return Vec::new();
+    }
+
     let mut targets = Vec::new();
     let quality = state.image_preview_quality();
 
-    for (message_index, message) in state.visible_messages().into_iter().enumerate() {
-        if rendered_rows >= layout.list_height {
+    for (message_index, row) in plan.rows().iter().enumerate() {
+        if row.message_top >= layout.list_height as isize {
             break;
         }
 
-        let line_offset = usize::from(message_index == 0) * state.message_line_scroll();
-        let global_index = state.message_scroll().saturating_add(message_index);
-        let previews = message.inline_previews();
+        let previews = row.message.inline_previews();
         let album =
             image_preview_album_layout(&previews, layout.preview_width, layout.max_preview_height);
-        let metrics = state.message_row_metrics_at_with_selected_bottom(
-            global_index,
-            message,
-            layout.content_width,
-            layout.preview_width,
-            layout.max_preview_height,
-            message_index == state.focused_message_selection().unwrap_or(usize::MAX),
-        );
-        let preview_rows_before_message = metrics
-            .body_top_offset()
-            .saturating_add(metrics.body_rows());
+        let preview_top_base = row.body_top + row.metrics.body_rows() as isize;
         let album_accent_color = (previews.len() == 1)
             .then(|| previews.first().and_then(|preview| preview.accent_color))
             .flatten();
@@ -174,10 +218,7 @@ pub(in crate::tui) fn visible_image_preview_targets(
             } else {
                 0
             };
-            let preview_top = rendered_rows as isize
-                + preview_rows_before_message as isize
-                + cell.y_offset_rows as isize
-                - line_offset as isize;
+            let preview_top = preview_top_base + cell.y_offset_rows as isize;
             let preview_bottom = preview_top.saturating_add(cell.height as isize);
             let visible_top = preview_top.max(0);
             let visible_bottom = preview_bottom.min(layout.list_height as isize);
@@ -196,15 +237,12 @@ pub(in crate::tui) fn visible_image_preview_targets(
                     top_clip_rows: u16::try_from(visible_top - preview_top).unwrap_or(u16::MAX),
                     accent_color: album_accent_color,
                     show_play_marker: preview.show_play_marker,
-                    message_id: message.id,
+                    message_id: row.message.id,
                     url: preview_request_url(preview, cell.width, cell.height, quality),
                     filename: preview.filename.to_owned(),
                 });
             }
         }
-
-        rendered_rows =
-            rendered_rows.saturating_add(metrics.visible_rows_after_scroll(line_offset));
     }
 
     targets
@@ -495,6 +533,7 @@ fn preview_dimension_pixels(cells: u64, pixels_per_cell: u64) -> u64 {
         .clamp(1, DISCORD_MEDIA_PROXY_MAX_PREVIEW_DIMENSION)
 }
 
+#[cfg(test)]
 pub(in crate::tui) fn visible_avatar_targets(
     state: &DashboardState,
     layout: ImagePreviewLayout,
@@ -503,43 +542,49 @@ pub(in crate::tui) fn visible_avatar_targets(
         return Vec::new();
     }
 
-    let mut rendered_rows = 0usize;
+    let messages = state.visible_messages();
+    let selected = state.focused_message_selection();
+    let plan = MessageViewportPlan::new(
+        &messages,
+        selected,
+        state,
+        layout.content_width,
+        layout.preview_width,
+        layout.max_preview_height,
+    );
+    visible_avatar_targets_from_plan(state, layout, &plan)
+}
+
+pub(in crate::tui) fn visible_avatar_targets_from_plan(
+    state: &DashboardState,
+    layout: ImagePreviewLayout,
+    plan: &MessageViewportPlan<'_>,
+) -> Vec<AvatarTarget> {
+    if !state.show_avatars() {
+        return Vec::new();
+    }
+
     let mut targets = Vec::new();
 
-    for (local_index, message) in state.visible_messages().into_iter().enumerate() {
-        if rendered_rows >= layout.list_height {
+    for row in plan.rows() {
+        if row.message_top >= layout.list_height as isize {
             break;
         }
 
-        let line_offset = usize::from(rendered_rows == 0) * state.message_line_scroll();
-        let global_index = state.message_scroll().saturating_add(local_index);
-        let metrics = state.message_row_metrics_at_with_selected_bottom(
-            global_index,
-            message,
-            layout.content_width,
-            layout.preview_width,
-            layout.max_preview_height,
-            local_index == state.focused_message_selection().unwrap_or(usize::MAX),
-        );
-        let message_block_top = rendered_rows as isize - line_offset as isize;
-        let body_top = message_block_top + metrics.body_top_offset() as isize;
-        let avatar_bottom = body_top.saturating_add(AVATAR_PREVIEW_HEIGHT as isize);
-        let visible_top = body_top.max(0);
+        let avatar_bottom = row.body_top.saturating_add(AVATAR_PREVIEW_HEIGHT as isize);
+        let visible_top = row.body_top.max(0);
         let visible_bottom = avatar_bottom.min(layout.list_height as isize);
-        if state.message_starts_author_group_at(global_index)
-            && let Some(url) = message.author_avatar_url.as_ref()
+        if row.show_header
+            && let Some(url) = row.message.author_avatar_url.as_ref()
             && visible_top < visible_bottom
         {
             targets.push(AvatarTarget {
                 row: visible_top,
                 visible_height: u16::try_from(visible_bottom - visible_top).unwrap_or(u16::MAX),
-                top_clip_rows: u16::try_from(visible_top - body_top).unwrap_or(u16::MAX),
+                top_clip_rows: u16::try_from(visible_top - row.body_top).unwrap_or(u16::MAX),
                 url: url.clone(),
             });
         }
-
-        rendered_rows =
-            rendered_rows.saturating_add(metrics.visible_rows_after_scroll(line_offset));
     }
 
     targets

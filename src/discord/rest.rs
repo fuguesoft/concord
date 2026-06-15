@@ -1,4 +1,8 @@
 use crate::discord::fingerprint::discord_rest_client;
+use crate::{AppError, Result};
+
+use reqwest::{RequestBuilder, header::AUTHORIZATION};
+use serde::de::DeserializeOwned;
 
 mod application_commands;
 mod connection;
@@ -27,6 +31,36 @@ impl DiscordRest {
             raw_http: discord_rest_client(),
             token,
         }
+    }
+
+    fn authenticated(&self, request: RequestBuilder) -> RequestBuilder {
+        request.header(AUTHORIZATION, &self.token)
+    }
+
+    async fn send_unit(&self, request: RequestBuilder, label: &str) -> Result<()> {
+        self.authenticated(request)
+            .send()
+            .await
+            .map_err(|error| AppError::DiscordRequest(format!("{label} request failed: {error}")))?
+            .error_for_status()
+            .map_err(|error| AppError::DiscordRequest(format!("{label} failed: {error}")))?;
+        Ok(())
+    }
+
+    async fn send_json<T: DeserializeOwned>(
+        &self,
+        request: RequestBuilder,
+        label: &str,
+    ) -> Result<T> {
+        self.authenticated(request)
+            .send()
+            .await
+            .map_err(|error| AppError::DiscordRequest(format!("{label} request failed: {error}")))?
+            .error_for_status()
+            .map_err(|error| AppError::DiscordRequest(format!("{label} failed: {error}")))?
+            .json()
+            .await
+            .map_err(|error| AppError::DiscordRequest(format!("{label} decode failed: {error}")))
     }
 }
 

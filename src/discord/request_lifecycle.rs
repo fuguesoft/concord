@@ -1,5 +1,9 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
+
+mod primitives;
+
+use primitives::{LastSelection, TimedRequestSet};
 
 use crate::discord::ids::{
     Id,
@@ -11,19 +15,19 @@ use crate::discord::{AppEvent, ForumPostArchiveState, MessageHistoryLoadTarget};
 #[derive(Debug, Default)]
 pub(super) struct HistoryRequests {
     requests: HashMap<Id<ChannelMarker>, HistoryRequestState>,
-    last_channel: Option<Id<ChannelMarker>>,
+    last_channel: LastSelection<Id<ChannelMarker>>,
 }
 
 #[derive(Debug, Default)]
 pub(super) struct ForumPostRequests {
     requests: HashMap<Id<ChannelMarker>, ForumPostRequestState>,
-    last_channel: Option<Id<ChannelMarker>>,
+    last_channel: LastSelection<Id<ChannelMarker>>,
 }
 
 #[derive(Debug, Default)]
 pub(super) struct PinnedMessageRequests {
     requests: HashMap<Id<ChannelMarker>, PinnedMessageRequestState>,
-    last_channel: Option<Id<ChannelMarker>>,
+    last_channel: LastSelection<Id<ChannelMarker>>,
 }
 
 #[derive(Debug, Default)]
@@ -54,16 +58,14 @@ pub(crate) struct MentionMemberSearchTarget {
     pub(crate) query: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct MessageAuthorMemberRequests {
-    requested: HashMap<MessageAuthorMemberRequestKey, Instant>,
-    requested_order: VecDeque<MessageAuthorMemberRequestKey>,
+    requested: TimedRequestSet<MessageAuthorMemberRequestKey>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct InitialUnknownMemberRequests {
-    requested: HashMap<InitialUnknownMemberRequestKey, Instant>,
-    requested_order: VecDeque<InitialUnknownMemberRequestKey>,
+    requested: TimedRequestSet<InitialUnknownMemberRequestKey>,
 }
 
 #[derive(Debug)]
@@ -80,10 +82,9 @@ pub(super) struct MemberListSubscriptionRequests {
     pending: Option<PendingMemberListSubscription>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct MentionMemberSearchRequests {
-    requested: HashMap<MentionMemberSearchKey, Instant>,
-    requested_order: VecDeque<MentionMemberSearchKey>,
+    requested: TimedRequestSet<MentionMemberSearchKey>,
     pending: Option<PendingMentionMemberSearch>,
 }
 
@@ -404,11 +405,10 @@ impl HistoryRequests {
         force_reload: bool,
     ) -> Option<Id<ChannelMarker>> {
         let Some(channel_id) = channel_id else {
-            self.last_channel = None;
+            self.last_channel.clear();
             return None;
         };
-        let channel_changed = self.last_channel != Some(channel_id);
-        self.last_channel = Some(channel_id);
+        let channel_changed = self.last_channel.select(channel_id);
 
         match self.requests.get(&channel_id).copied() {
             None => {
@@ -484,11 +484,10 @@ impl ForumPostRequests {
             should_load_more,
         }) = target
         else {
-            self.last_channel = None;
+            self.last_channel.clear();
             return None;
         };
-        let channel_changed = self.last_channel != Some(channel_id);
-        self.last_channel = Some(channel_id);
+        let channel_changed = self.last_channel.select(channel_id);
 
         let state = self.requests.entry(channel_id).or_default();
         let next = state.next(channel_changed, should_load_more)?;
@@ -530,11 +529,10 @@ impl PinnedMessageRequests {
         channel_id: Option<Id<ChannelMarker>>,
     ) -> Option<Id<ChannelMarker>> {
         let Some(channel_id) = channel_id else {
-            self.last_channel = None;
+            self.last_channel.clear();
             return None;
         };
-        let channel_changed = self.last_channel != Some(channel_id);
-        self.last_channel = Some(channel_id);
+        let channel_changed = self.last_channel.select(channel_id);
 
         match self.requests.get(&channel_id).copied() {
             None => {
@@ -732,13 +730,13 @@ impl MessageAuthorMemberRequests {
         missing: Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)>,
         now: Instant,
     ) -> Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)> {
-        self.prune_requested(now);
+        self.requested.prune(now);
 
         let mut requests = Vec::new();
         for (guild_id, user_ids) in missing {
             let fresh_user_ids = user_ids
                 .into_iter()
-                .filter(|user_id| self.insert_requested((guild_id, *user_id), now))
+                .filter(|user_id| self.requested.insert((guild_id, *user_id), now))
                 .collect::<Vec<_>>();
             if !fresh_user_ids.is_empty() {
                 requests.push((guild_id, fresh_user_ids));
@@ -747,34 +745,15 @@ impl MessageAuthorMemberRequests {
         requests
     }
 
-    fn insert_requested(&mut self, key: MessageAuthorMemberRequestKey, now: Instant) -> bool {
-        if self.requested.contains_key(&key) {
-            return false;
-        }
-        self.requested.insert(key, now);
-        self.requested_order.push_back(key);
-        self.prune_requested(now);
-        true
-    }
-
     fn remove(&mut self, key: MessageAuthorMemberRequestKey) {
         self.requested.remove(&key);
-        self.requested_order
-            .retain(|requested_key| requested_key != &key);
     }
+}
 
-    fn prune_requested(&mut self, now: Instant) {
-        self.requested.retain(|_, requested_at| {
-            now.checked_duration_since(*requested_at)
-                .is_none_or(|age| age <= Self::REQUEST_TTL)
-        });
-        self.requested_order
-            .retain(|key| self.requested.contains_key(key));
-        while self.requested.len() > Self::MAX_REQUESTED {
-            let Some(oldest) = self.requested_order.pop_front() else {
-                break;
-            };
-            self.requested.remove(&oldest);
+impl Default for MessageAuthorMemberRequests {
+    fn default() -> Self {
+        Self {
+            requested: TimedRequestSet::new(Self::REQUEST_TTL, Self::MAX_REQUESTED),
         }
     }
 }
@@ -788,13 +767,13 @@ impl InitialUnknownMemberRequests {
         missing: Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)>,
         now: Instant,
     ) -> Vec<(Id<GuildMarker>, Vec<Id<UserMarker>>)> {
-        self.prune_requested(now);
+        self.requested.prune(now);
 
         let mut requests = Vec::new();
         for (guild_id, user_ids) in missing {
             let fresh_user_ids = user_ids
                 .into_iter()
-                .filter(|user_id| self.insert_requested((guild_id, *user_id), now))
+                .filter(|user_id| self.requested.insert((guild_id, *user_id), now))
                 .collect::<Vec<_>>();
             if !fresh_user_ids.is_empty() {
                 requests.push((guild_id, fresh_user_ids));
@@ -802,29 +781,12 @@ impl InitialUnknownMemberRequests {
         }
         requests
     }
+}
 
-    fn insert_requested(&mut self, key: InitialUnknownMemberRequestKey, now: Instant) -> bool {
-        if self.requested.contains_key(&key) {
-            return false;
-        }
-        self.requested.insert(key, now);
-        self.requested_order.push_back(key);
-        self.prune_requested(now);
-        true
-    }
-
-    fn prune_requested(&mut self, now: Instant) {
-        self.requested.retain(|_, requested_at| {
-            now.checked_duration_since(*requested_at)
-                .is_none_or(|age| age <= Self::REQUEST_TTL)
-        });
-        self.requested_order
-            .retain(|key| self.requested.contains_key(key));
-        while self.requested.len() > Self::MAX_REQUESTED {
-            let Some(oldest) = self.requested_order.pop_front() else {
-                break;
-            };
-            self.requested.remove(&oldest);
+impl Default for InitialUnknownMemberRequests {
+    fn default() -> Self {
+        Self {
+            requested: TimedRequestSet::new(Self::REQUEST_TTL, Self::MAX_REQUESTED),
         }
     }
 }
@@ -953,19 +915,20 @@ impl MentionMemberSearchRequests {
     const MAX_REQUESTED: usize = 128;
 
     pub(super) fn set_target(&mut self, target: Option<MentionMemberSearchTarget>, now: Instant) {
-        self.prune_requested(now);
+        self.requested.prune(now);
         let Some(target) = target.and_then(normalize_mention_member_search_target) else {
             self.pending = None;
             return;
         };
-        if self.requested.contains_key(&target.key()) {
+        let key = target.key();
+        if self.requested.contains(&key) {
             self.pending = None;
             return;
         }
         if self
             .pending
             .as_ref()
-            .is_some_and(|pending| pending.target.key() == target.key())
+            .is_some_and(|pending| pending.target.key() == key)
         {
             return;
         }
@@ -980,39 +943,25 @@ impl MentionMemberSearchRequests {
     }
 
     pub(super) fn next_due(&mut self, now: Instant) -> Option<MentionMemberSearchTarget> {
-        self.prune_requested(now);
+        self.requested.prune(now);
         let pending = self.pending.as_ref()?;
         if pending.ready_at > now {
             return None;
         }
         let pending = self.pending.take()?;
         let key = pending.target.key();
-        if self.requested.contains_key(&key) {
+        if !self.requested.insert(key, now) {
             return None;
         }
-        self.insert_requested(key, now);
         Some(pending.target)
     }
+}
 
-    fn insert_requested(&mut self, key: MentionMemberSearchKey, now: Instant) {
-        self.requested_order.retain(|existing| existing != &key);
-        self.requested.insert(key.clone(), now);
-        self.requested_order.push_back(key);
-        self.prune_requested(now);
-    }
-
-    fn prune_requested(&mut self, now: Instant) {
-        self.requested.retain(|_, requested_at| {
-            now.checked_duration_since(*requested_at)
-                .is_none_or(|age| age <= Self::REQUEST_TTL)
-        });
-        self.requested_order
-            .retain(|key| self.requested.contains_key(key));
-        while self.requested.len() > Self::MAX_REQUESTED {
-            let Some(oldest) = self.requested_order.pop_front() else {
-                break;
-            };
-            self.requested.remove(&oldest);
+impl Default for MentionMemberSearchRequests {
+    fn default() -> Self {
+        Self {
+            requested: TimedRequestSet::new(Self::REQUEST_TTL, Self::MAX_REQUESTED),
+            pending: None,
         }
     }
 }
